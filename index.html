@@ -1241,7 +1241,7 @@ async function callClaude(messages, cb = {}){
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:apiHeaders(),
-    body:JSON.stringify({ model:curModel || modelOrDefault(), max_tokens:2000, system:systemPrompt(), tools:cachedTools(), messages, stream:true })
+    body:JSON.stringify({ model:curModel || modelOrDefault(), max_tokens:2000, system:cb.ctx ? cb.ctx.system : systemPrompt(), tools:cb.ctx ? cb.ctx.tools : cachedTools(), messages, stream:true })
   });
   if (!r.ok){
     const data = await r.json().catch(() => ({})), msg = (data.error && data.error.message) || 'HTTP ' + r.status;
@@ -1250,7 +1250,9 @@ async function callClaude(messages, cb = {}){
       while (cur > 0 && !(messages[cur].role === 'user' && (typeof messages[cur].content === 'string' || messages[cur].content.some(b => b.type === 'text')))) cur--;
       return callClaude(messages.map((m, i) => i < cur ? noThinking(m) : m), Object.assign({}, cb, { __noThink:true }));
     }
-    if (settings.fetch && /web_fetch|web-fetch/i.test(msg)){ settings.fetch = false; saveSettings(); toast('Lettura pagine web non disponibile per questo account: disattivata'); return callClaude(messages, cb); }
+    if (/thinking/i.test(msg) && /signature|bound to a different/i.test(msg) && !cb.__noThink2)   // ultima risorsa: senza nessun blocco di ragionamento
+      return callClaude(messages.map(noThinking), Object.assign({}, cb, { __noThink:true, __noThink2:true }));
+    if (settings.fetch && /web_fetch|web-fetch/i.test(msg)){ settings.fetch = false; saveSettings(); if (cb.ctx) cb.ctx.tools = cachedTools(); toast('Lettura pagine web non disponibile per questo account: disattivata'); return callClaude(messages, cb); }
     throw new Error(msg);
   }
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -1299,9 +1301,10 @@ async function callClaude(messages, cb = {}){
 }
 async function runAgent(turn, speaker){
   let final = '';
+  const ctx = { system:systemPrompt(), tools:cachedTools() };   // istruzioni e strumenti fissi per tutta la risposta: se cambiano a metà (l'ora, una nota) Claude rifiuta il proprio ragionamento
   for (let step = 0; step < 12; step++){
     let bubble = null, acc = '';
-    const data = await callClaude([...history.flat().map(noThinking), ...turn], {
+    const data = await callClaude([...history.flat().map(noThinking), ...turn], { ctx,
       onText:t => { if (!bubble) bubble = addMsg('bot', ''); acc += t; bubble.textContent = cleanText(acc); scrollLog(); speaker.push(t); NN.pulse(); },
       onBlockStart:b => { if (b.type === 'server_tool_use'){ NN.burst(4); NN.label(TOOL_LABEL[b.name] || b.name); } }
     });
