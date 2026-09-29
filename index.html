@@ -1123,6 +1123,7 @@ async function callClaude(messages, cb = {}){
       case 'content_block_start': {
         const b = Object.assign({}, ev.content_block);
         if (b.type === 'text') b.text = b.text || '';
+        if (b.type === 'thinking') b.thinking = b.thinking || '';
         if (b.type === 'tool_use' || b.type === 'server_tool_use') b._json = '';
         blocks[ev.index] = b; if (cb.onBlockStart) cb.onBlockStart(b); break;
       }
@@ -1131,6 +1132,8 @@ async function callClaude(messages, cb = {}){
         if (d.type === 'text_delta'){ b.text += d.text; if (cb.onText) cb.onText(d.text); }
         else if (d.type === 'input_json_delta') b._json += d.partial_json;
         else if (d.type === 'citations_delta') (b.citations = b.citations || []).push(d.citation);
+        else if (d.type === 'thinking_delta') b.thinking = (b.thinking || '') + d.thinking;
+        else if (d.type === 'signature_delta') b.signature = d.signature;
         break;
       }
       case 'content_block_stop': {
@@ -1189,8 +1192,9 @@ function logT(k, t){ transcript.push({ k, t }); if (transcript.length > 80) tran
 function persistHistory(){ store.set('history', history.map(t => t.map(m => ({ role:m.role, content:stripHeavy(m.content) })))); }
 function stripHeavy(c){
   if (!Array.isArray(c)) return c;
-  return c.map(b => (b.type === 'image' || b.type === 'document') ? { type:'text', text:'[allegato non più disponibile]' }
+  const out = c.filter(b => b.type !== 'thinking' && b.type !== 'redacted_thinking').map(b => (b.type === 'image' || b.type === 'document') ? { type:'text', text:'[allegato non più disponibile]' }
     : (b.type === 'tool_result' && Array.isArray(b.content)) ? Object.assign({}, b, { content:stripHeavy(b.content) }) : b);
+  return out.length ? out : [{ type:'text', text:'…' }];
 }
 function trimHistory(){
   while (history.length > 8) history.shift();
