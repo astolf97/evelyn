@@ -89,9 +89,6 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
 .plancia b{color:var(--text);font-weight:500}
 .pl-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mint);margin-right:5px;vertical-align:middle}
 .pl-dot.bad{background:var(--danger)}
-.lock{position:fixed;inset:0;background:var(--ink);z-index:50;display:flex;align-items:center;justify-content:center}
-.lockbox{display:flex;flex-direction:column;gap:12px;align-items:center;width:min(320px,90vw)}
-.lockbox input{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:1.4rem;text-align:center;letter-spacing:.4em;width:100%;color:var(--text)}
 </style>
 </head>
 <body class="s-idle">
@@ -120,15 +117,6 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
   <input id="file" type="file" multiple accept="image/*,application/pdf,text/*,.md,.csv,.json,.log" hidden>
 </footer>
 <div id="toast" class="toast" role="status"></div>
-<div id="lock" class="lock" hidden>
-  <div class="lockbox">
-    <div class="brand"><span class="dot"></span><span id="lockName">Evelyn</span></div>
-    <p class="hint">Inserisci il PIN</p>
-    <input id="pinIn" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="PIN">
-    <button id="pinOk" class="primary">Sblocca</button>
-    <p id="pinMsg" class="hint"></p>
-  </div>
-</div>
 
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg">
@@ -183,8 +171,6 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
     </div>
     <label class="check"><input id="sPlancia" type="checkbox"> Plancia sotto la rete: servizi, coda e traffico di oggi</label>
     <div class="btns" style="justify-content:flex-start"><button type="button" id="sMonNow">Controlla adesso</button><button type="button" id="sPush">Attiva notifiche push dal gateway</button></div>
-    <h2>Sicurezza</h2>
-    <label>PIN all'apertura (vuoto = non cambiare, 0 = rimuovere)<input id="sPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
     <h2>Integrazioni facoltative</h2>
     <label>Home Assistant, indirizzo<input id="sHaUrl" placeholder="https://casa.example.com" autocomplete="off"></label>
     <label>Home Assistant, token di accesso<input id="sHaToken" type="password" autocomplete="off"></label>
@@ -245,7 +231,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
 };
-const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, pin:'', bargeIn:true, stt:'google', oaiKey:'', pushOn:false };
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false };
 const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
 const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
 const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -1640,8 +1626,7 @@ async function enablePush(){
 $('#sMonNow').onclick = () => { $('#dlgSettings').close('ok'); monitorTick(true, true); };
 $('#sPush').onclick = enablePush;
 
-/* ================= PIN e avvio ================= */
-async function sha(str){ if (!crypto.subtle) return 'plain:' + str; const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, '0')).join(''); }
+/* ================= Avvio ================= */
 let unlocked = false;
 function afterUnlock(){
   if (unlocked) return; unlocked = true;
@@ -1656,14 +1641,6 @@ function afterUnlock(){
     if ([...qp.keys()].length) window.history.replaceState(null, '', location.pathname);
   }, 900);
 }
-async function tryUnlock(){
-  const v = $('#pinIn').value;
-  if (v && (await sha(v)) === settings.pin){ $('#lock').hidden = true; $('#pinIn').value = ''; $('#pinMsg').textContent = ''; afterUnlock(); }
-  else { $('#pinMsg').textContent = 'PIN errato'; $('#pinIn').value = ''; }
-}
-$('#pinOk').onclick = tryUnlock;
-$('#pinIn').onkeydown = e => { if (e.key === 'Enter') tryUnlock(); };
-function lockIfNeeded(){ if (!settings.pin){ afterUnlock(); return; } $('#lockName').textContent = settings.name; $('#lock').hidden = false; setTimeout(() => $('#pinIn').focus(), 100); }
 
 /* ================= Impostazioni ================= */
 function applyAccent(){
@@ -1682,7 +1659,7 @@ function openSettings(){
   $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
   $('#sFollow').checked = settings.followUp; $('#sEngine').value = settings.tts; $('#sElKey').value = settings.elKey; $('#sElVoice').value = settings.elVoice; $('#sElModel').value = settings.elModel; $('#sGh').value = settings.ghToken;
   $('#sStt').value = settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
-  $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia; $('#sPin').value = '';
+  $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia; 
   const mh = $('#sMonitorHook'); mh.innerHTML = ''; const hs = hooks();
   if (!hs.length){ const o = document.createElement('option'); o.value = ''; o.textContent = 'nessun webhook configurato'; mh.appendChild(o); }
   hs.forEach(h => { const o = document.createElement('option'); o.value = h.name; o.textContent = h.name; mh.appendChild(o); });
@@ -1694,7 +1671,6 @@ function openSettings(){
 $('#sRate').oninput = e => $('#sRateVal').textContent = e.target.value + '×';
 $('#dlgSettings').addEventListener('close', async () => {
   if ($('#dlgSettings').returnValue !== 'ok') return;
-  const pinV = $('#sPin').value.trim(); if (pinV === '0') settings.pin = ''; else if (pinV) settings.pin = await sha(pinV);
   Object.assign(settings, {
     apiKey:$('#sKey').value.trim(), model:$('#sModel').value, name:$('#sName').value.trim() || 'Evelyn', userName:$('#sUser').value.trim(),
     voiceURI:$('#sVoice').value, rate:parseFloat($('#sRate').value), speak:$('#sSpeak').checked, wake:$('#sWake').checked, web:$('#sWeb').checked,
@@ -1760,7 +1736,7 @@ function welcome(){
 applySettings();
 if (transcript.length){ transcript.forEach(e => addMsg(e.k, e.t)); addMsg('tool', '› conversazione ripresa'); } else welcome();
 if (settings.ghToken) setTimeout(syncNow, 800);
-lockIfNeeded();
+delete settings.pin; afterUnlock();   // PIN rimosso: si apre sempre direttamente
 </script>
 </body>
 </html>
