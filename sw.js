@@ -1,4 +1,4 @@
-const CACHE = 'evelyn-v6';
+const CACHE = 'evelyn-v7';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {})); });
 self.addEventListener('activate', e => {

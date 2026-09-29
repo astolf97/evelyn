@@ -20,7 +20,8 @@
   --c:var(--cyan);
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html,body{height:100%;margin:0;max-width:100%;overflow-x:hidden}
+html{-webkit-text-size-adjust:100%}
 body{background:radial-gradient(120% 70% at 50% 0%,#17314b 0%,var(--ink) 62%);color:var(--text);font-family:var(--body);font-size:16px;
   display:flex;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -40,6 +41,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 .nnlabel.on{opacity:1}
 .live{min-height:1.4em;padding:2px 20px 6px;color:var(--mint);text-align:center;font-style:italic;flex:none}
 .log{flex:1;overflow-y:auto;padding:4px 16px 16px;display:flex;flex-direction:column;gap:10px}
+.msg img,.msg pre,.msg table{max-width:100%;overflow-x:auto}
 .msg{max-width:88%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
 .user{align-self:flex-end;background:#1b3d5c;border-bottom-right-radius:4px}
 .bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
@@ -61,18 +63,24 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 .pchip{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 12px;font-size:.85rem}
 .pchip button{background:none;border:none;color:var(--dim);cursor:pointer}
 .primary,.send{background:var(--cyan);color:var(--ink);border:none;border-radius:12px;padding:0 18px;font-weight:500;cursor:pointer;min-height:44px}
-.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%;z-index:20}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100vw - 32px);z-index:20}
 .toast.on{opacity:1}
 .camwrap{position:fixed;inset:0;background:rgba(5,10,18,.85);display:flex;align-items:center;justify-content:center;z-index:30}
 .camwrap video{max-width:92vw;max-height:80vh;border-radius:16px;border:2px solid var(--cyan)}
-dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:0;width:min(560px,94vw);max-height:88vh}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:0;width:min(560px,calc(100vw - 16px));max-width:calc(100vw - 16px);max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
 dialog::backdrop{background:rgba(5,10,18,.7)}
 .dlg{padding:20px;display:flex;flex-direction:column;gap:12px}
 .dlg h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:8px 0 0}
 .dlg label{display:flex;flex-direction:column;gap:5px;font-size:.9rem;color:var(--dim)}
 .dlg label.check{flex-direction:row;align-items:center;gap:10px;color:var(--text)}
-.dlg input:not([type=checkbox]):not([type=range]),.dlg select,.dlg textarea{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text)}
-.row{display:flex;gap:10px}.row>*{flex:1}
+.dlg input:not([type=checkbox]):not([type=range]),.dlg select,.dlg textarea{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);width:100%;min-width:0;max-width:100%}
+.dlg label{min-width:0}
+.dlg textarea{resize:vertical}
+#sHooks{font-size:.8rem;line-height:1.5;word-break:break-all;min-height:7em}
+.dlg h2{padding-top:12px;border-top:1px solid var(--line)}
+.dlg h2:first-child{border-top:none;padding-top:0}
+.dlg .btns.sticky{position:sticky;bottom:0;background:var(--panel);margin:6px -20px -20px;padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.row{display:flex;flex-wrap:wrap;gap:10px}.row>*{flex:1 1 140px;min-width:0}
 .btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px}
 .btns button{border:1px solid var(--line);background:transparent;border-radius:10px;padding:10px 14px;cursor:pointer}
 .btns .primary{border:none}
@@ -89,6 +97,7 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
 .plancia b{color:var(--text);font-weight:500}
 .pl-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mint);margin-right:5px;vertical-align:middle}
 .pl-dot.bad{background:var(--danger)}
+@media (max-width:400px){.icon{width:38px;height:38px}.top{gap:8px;padding:10px 12px}.dlg{padding:16px}.dlg .btns.sticky{margin:6px -16px -16px;padding-left:16px;padding-right:16px}.log{padding-left:12px;padding-right:12px}.bar{padding-left:12px;padding-right:12px}}
 </style>
 </head>
 <body class="s-idle">
@@ -177,8 +186,12 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
     <label>Webhook, uno per riga nel formato nome | URL<textarea id="sHooks" rows="3" placeholder="luci giardino | https://esempio.com/hook"></textarea></label>
     <h2>Sincronizzazione tra dispositivi</h2>
     <label>Token GitHub con permesso gist<input id="sGh" type="password" autocomplete="off" placeholder="ghp_..."></label>
-    <p class="hint">Chiavi e token restano solo in questo browser: non finiscono né nel backup né nella sincronizzazione. Scorciatoia su PC: Ctrl + Spazio per parlare.</p>
+    <p class="hint">Le impostazioni si salvano in questo browser e, se c'è il token GitHub, si sincronizzano tra i tuoi dispositivi (chiavi e token esclusi). Con "Backup" scarichi un file con tutto, chiavi comprese se vuoi: tienilo al sicuro. Scorciatoia su PC: Ctrl + Spazio per parlare.</p>
     <div class="btns">
+      <button type="button" id="sBackup">Backup</button>
+      <button type="button" id="sRestore">Ripristina</button>
+    </div>
+    <div class="btns sticky">
       <button type="button" id="sDiag">Controllo sistema</button>
       <button type="button" id="sTest">Prova voce</button>
       <button type="button" id="sClear">Nuova conversazione</button>
@@ -260,7 +273,7 @@ const isAndroid = /Android/i.test(navigator.userAgent);
 const uid = () => Math.random().toString(36).slice(2, 8);
 const enc = encodeURIComponent;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const saveSettings = () => store.set('settings', settings);
+const saveSettings = () => { store.set('settings', settings); try{ if (meta){ meta.updated.settings = Date.now(); store.set('meta', meta); } if (typeof scheduleSync === 'function') scheduleSync(); }catch(e){} };
 function saveCol(k, v){ store.set(k, v); meta.updated[k] = Date.now(); store.set('meta', meta); refreshData(); scheduleSync(); }
 const saveTodos = () => saveCol('todos', todos);
 const saveRem = () => saveCol('reminders', reminders);
@@ -1137,7 +1150,8 @@ const IMPL = {
     return { ok:true, entita_aggiornate:Array.isArray(res) ? res.map(s => s.entity_id + ': ' + s.state) : [] };
   },
   async call_webhook({ name, payload = {} }){
-    const h = hooks().find(x => x.name === name); if (!h) return { error:'Webhook non trovato' };
+    const h = hooks().find(x => x.name === name) || hooks().find(x => x.name.toLowerCase() === String(name).toLowerCase());
+    if (!h) return { error:'Webhook non trovato. Disponibili: ' + hooks().map(x => x.name).join(', ') };
     const r = await fetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload) });
     return { stato_http:r.status, risposta:(await r.text()).slice(0, 1500) };
   }
@@ -1167,7 +1181,7 @@ Quando compare un pulsante da toccare (messaggi, chiamate, link bloccati, calend
 Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remember. Se servono un numero o un contatto che non conosci, chiedilo.
 Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
 Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
-I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
+I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo".${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
   const dynamic = `Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.
 Routine disponibili:
 ${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
@@ -1399,9 +1413,11 @@ function renderData(){
   memory.forEach(m => um.appendChild(li(m.fact, () => { memory = memory.filter(x => x !== m); saveMem(); })));
 }
 function refreshData(){ if ($('#dlgData').open) renderData(); }
+const SECRETS = ['apiKey', 'haToken', 'ghToken', 'elKey', 'oaiKey', 'gistId'];
+const withoutSecrets = o => Object.fromEntries(Object.entries(o).filter(([k]) => !SECRETS.includes(k)));
 $('#dExport').onclick = () => {
-  const { apiKey, haToken, ghToken, elKey, gistId, ...safe } = settings;
-  const data = { app:'assistente', version:2, esportato:new Date().toISOString(), settings:safe, todos, reminders, memory, notes, routines };
+  const keys = confirm('Includere nel backup anche chiavi e token (Anthropic, ElevenLabs, GitHub…)? Così il ripristino è completo, ma il file va tenuto al sicuro.');
+  const data = { app:'assistente', version:3, esportato:new Date().toISOString(), settings:keys ? settings : withoutSecrets(settings), todos, reminders, memory, notes, routines };
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type:'application/json' }));
   a.download = 'backup-' + settings.name.toLowerCase() + '.json'; a.click();
 };
@@ -1410,13 +1426,16 @@ $('#dExportChat').onclick = () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt || '(vuota)'], { type:'text/plain' })); a.download = 'conversazione-' + new Date().toISOString().slice(0, 10) + '.txt'; a.click();
 };
 $('#dImport').onclick = () => $('#importFile').click();
+$('#sBackup').onclick = () => $('#dExport').click();
+$('#sRestore').onclick = () => $('#importFile').click();
 $('#importFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try{
     const d = JSON.parse(await f.text());
     if (!confirm('Sostituire promemoria, liste, note, routine e memoria con quelli del backup?')) return;
     todos = d.todos || []; reminders = d.reminders || []; memory = d.memory || []; notes = d.notes || []; routines = d.routines || [];
-    if (d.settings){ const { apiKey, haToken, ghToken, elKey, gistId } = settings; settings = Object.assign({}, DEFAULTS, d.settings, { apiKey, haToken, ghToken, elKey, gistId }); saveSettings(); applySettings(); }
+    if (d.settings){ const mine = Object.fromEntries(SECRETS.filter(k => settings[k]).map(k => [k, settings[k]]));
+      settings = Object.assign({}, DEFAULTS, d.settings, mine, Object.fromEntries(SECRETS.filter(k => d.settings[k]).map(k => [k, d.settings[k]]))); delete settings.pin; saveSettings(); applySettings(); }
     saveTodos(); saveRem(); saveMem(); saveNotes(); saveRoutines(); toast('Backup importato');
   }catch(err){ toast('File di backup non valido'); }
 };
@@ -1432,7 +1451,7 @@ async function gh(path, opts = {}){
   if (!r.ok) throw new Error('GitHub ha risposto ' + r.status);
   return r.json();
 }
-const snapshot = () => JSON.stringify({ version:3, updated:meta.updated, todos, reminders, memory, notes, routines });
+const snapshot = () => JSON.stringify({ version:4, updated:meta.updated, todos, reminders, memory, notes, routines, settings:withoutSecrets(settings) });
 function getCol(k){ return { todos, reminders, memory, notes, routines }[k]; }
 function setCol(k, v){ if (k === 'todos') todos = v; else if (k === 'reminders') reminders = v; else if (k === 'memory') memory = v; else if (k === 'notes') notes = v; else if (k === 'routines') routines = v; store.set(k, v); }
 async function findGist(){
@@ -1458,6 +1477,12 @@ function applyRemote(d){
       else if (lt > rt) push = true;
     }
   }
+  if (d.settings && typeof d.settings === 'object'){   // impostazioni: vince la più recente, chiavi e token restano quelli locali
+    const rt = ru.settings || 0, lt = meta.updated.settings || 0;
+    if (rt > lt || (!settings.hooks && d.settings.hooks)){ const mine = Object.fromEntries(SECRETS.map(k => [k, settings[k]])); settings = Object.assign({}, DEFAULTS, withoutSecrets(d.settings), mine); delete settings.pin;
+      store.set('settings', settings); meta.updated.settings = rt; applySettings(); }
+    else if (lt > rt) push = true;
+  } else push = true;
   store.set('meta', meta); refreshData(); return push;
 }
 async function syncNow(){
