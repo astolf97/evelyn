@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b2a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Evelyn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0d1b2a; --panel:#13263a; --line:#1f3a55; --text:#e8eef3; --dim:#8aa0b3;
+  --cyan:#6fd3ff; --amber:#f2b35b; --mint:#8ef0c1; --blue:#5b8cff; --danger:#ff7a85;
+  --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --c:var(--cyan);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(120% 70% at 50% 0%,#17314b 0%,var(--ink) 62%);color:var(--text);font-family:var(--body);font-size:16px;
+  display:flex;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+button,input,select,textarea{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.top,.bar,.log{width:100%;max-width:780px;margin-left:auto;margin-right:auto}
+.top{display:flex;align-items:center;gap:10px;padding:12px 16px}
+.brand{font-family:var(--display);font-weight:600;font-size:1.2rem;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c);transition:background .4s}
+body.s-listening{--c:var(--mint)} body.s-thinking{--c:var(--amber)} body.s-wake{--c:var(--blue)}
+.status{flex:1;font-family:var(--display);color:var(--dim);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{background:transparent;border:1px solid var(--line);border-radius:10px;width:42px;height:42px;cursor:pointer;font-size:1.1rem;flex:none}
+.icon:hover{border-color:var(--cyan)}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+.nnwrap{position:relative;display:block;width:100%;height:clamp(190px,36vh,380px);border:none;background:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;flex:none}
+.nnwrap canvas{width:100%;height:100%;display:block}
+.nnlabel{position:absolute;left:0;right:0;top:10px;text-align:center;font-family:var(--display);font-size:.85rem;color:var(--c);opacity:0;transition:opacity .4s;pointer-events:none}
+.nnlabel.on{opacity:1}
+.live{min-height:1.4em;padding:2px 20px 6px;color:var(--mint);text-align:center;font-style:italic;flex:none}
+.log{flex:1;overflow-y:auto;padding:4px 16px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{align-self:flex-end;background:#1b3d5c;border-bottom-right-radius:4px}
+.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+.bot.dim{color:var(--dim);font-size:.92em}
+.bot.alert{border-color:var(--amber)}
+.err{align-self:center;color:var(--danger);font-size:.9em;text-align:center}
+.tool{align-self:flex-start;font-family:var(--display);font-size:.8rem;color:var(--dim);padding-left:4px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-self:flex-start;max-width:100%}
+.chip{display:inline-block;background:transparent;border:1px solid var(--cyan);color:var(--cyan);border-radius:999px;padding:7px 14px;font-size:.9rem;cursor:pointer;text-decoration:none}
+.chip:hover{background:rgba(111,211,255,.12)}
+.examples .chip{border-color:var(--line);color:var(--text)}
+.shot{max-width:min(60%,320px);border-radius:10px;border:1px solid var(--line);align-self:flex-start}
+.shot.right{align-self:flex-end}
+.bar{display:flex;flex-direction:column;gap:8px;padding:8px 16px 14px}
+.inrow{display:flex;gap:8px}
+.inrow input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.pending{display:flex;flex-wrap:wrap;gap:6px}
+.pending:empty{display:none}
+.pchip{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 12px;font-size:.85rem}
+.pchip button{background:none;border:none;color:var(--dim);cursor:pointer}
+.primary,.send{background:var(--cyan);color:var(--ink);border:none;border-radius:12px;padding:0 18px;font-weight:500;cursor:pointer;min-height:44px}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%;z-index:20}
+.toast.on{opacity:1}
+.camwrap{position:fixed;inset:0;background:rgba(5,10,18,.85);display:flex;align-items:center;justify-content:center;z-index:30}
+.camwrap video{max-width:92vw;max-height:80vh;border-radius:16px;border:2px solid var(--cyan)}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:0;width:min(560px,94vw);max-height:88vh}
+dialog::backdrop{background:rgba(5,10,18,.7)}
+.dlg{padding:20px;display:flex;flex-direction:column;gap:12px}
+.dlg h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:8px 0 0}
+.dlg label{display:flex;flex-direction:column;gap:5px;font-size:.9rem;color:var(--dim)}
+.dlg label.check{flex-direction:row;align-items:center;gap:10px;color:var(--text)}
+.dlg input:not([type=checkbox]):not([type=range]),.dlg select,.dlg textarea{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:6px}
+.btns button{border:1px solid var(--line);background:transparent;border-radius:10px;padding:10px 14px;cursor:pointer}
+.btns .primary{border:none}
+.hint{font-size:.85rem;color:var(--dim);margin:0}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.list li{display:flex;align-items:center;gap:10px;background:var(--ink);border-radius:10px;padding:8px 10px}
+.list li span{flex:1;overflow-wrap:anywhere}
+.list li small{color:var(--dim)}
+.list li.done span{text-decoration:line-through;color:var(--dim)}
+.list .x{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1.1rem}
+.list .empty{background:none;color:var(--dim);font-size:.9rem}
+.d-ok{color:var(--mint)} .d-warn{color:var(--amber)} .d-bad{color:var(--danger)}
+</style>
+</head>
+<body class="s-idle">
+<header class="top">
+  <div class="brand"><span class="dot"></span><span id="brandName">Evelyn</span></div>
+  <div class="status" id="status">Pronto</div>
+  <button class="icon" id="btnData" title="Promemoria, liste, note e memoria" aria-label="Promemoria, liste, note e memoria">☰</button>
+  <button class="icon" id="btnSettings" title="Impostazioni" aria-label="Impostazioni">⚙</button>
+</header>
+<main>
+  <button id="orb" class="nnwrap" aria-label="Tocca per parlare">
+    <canvas id="nn"></canvas>
+    <span id="nnLabel" class="nnlabel"></span>
+  </button>
+  <div id="live" class="live"></div>
+  <section id="log" class="log" aria-live="polite"></section>
+</main>
+<footer class="bar">
+  <div id="pending" class="pending"></div>
+  <div class="inrow">
+    <button class="icon" id="attach" title="Allega immagine, PDF o testo" aria-label="Allega file">📎</button>
+    <input id="input" type="text" placeholder="Scrivi, oppure tocca la rete e parla" autocomplete="off">
+    <button id="send" class="send">Invia</button>
+  </div>
+  <input id="file" type="file" multiple accept="image/*,application/pdf,text/*,.md,.csv,.json,.log" hidden>
+</footer>
+<div id="toast" class="toast" role="status"></div>
+
+<dialog id="dlgSettings">
+  <form method="dialog" class="dlg">
+    <h2>Impostazioni</h2>
+    <label>API key Anthropic<input id="sKey" type="password" placeholder="sk-ant-..." autocomplete="off"></label>
+    <label>Modello
+      <select id="sModel">
+        <option value="claude-sonnet-5-5">Sonnet 5.5, equilibrato</option>
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5, più rapido ed economico</option>
+        <option value="claude-opus-5-5">Opus 5.5, più potente</option>
+      </select>
+    </label>
+    <div class="row">
+      <label>Nome assistente<input id="sName"></label>
+      <label>Come ti chiama<input id="sUser" placeholder="il tuo nome"></label>
+    </div>
+    <div class="row">
+      <label>Carattere<select id="sPersona"><option value="classica">Classica: elegante e asciutta</option><option value="amichevole">Amichevole: calda e informale</option><option value="essenziale">Essenziale: risposte minime</option><option value="sarcastica">Sarcastica: spiritosa e pungente</option><option value="custom">Personalizzato</option></select></label>
+      <label>Genere<select id="sGender"><option value="f">Femminile</option><option value="m">Maschile</option></select></label>
+    </div>
+    <label>Carattere personalizzato (usato se sopra scegli "Personalizzato")<textarea id="sPersonaCustom" rows="2" placeholder="Descrivi come deve comportarsi e parlare"></textarea></label>
+    <label>Altre pronunce del nome, per "sempre in ascolto"<input id="sWakeAlt" placeholder="evelin, eveline"></label>
+    <div class="row">
+      <label>Lingua<select id="sLang"><option value="it-IT">Italiano</option><option value="en-US">Inglese</option><option value="es-ES">Spagnolo</option><option value="fr-FR">Francese</option><option value="de-DE">Tedesco</option></select></label>
+      <label>Colore<select id="sAccent"><option value="cyan">Azzurro</option><option value="violet">Viola</option><option value="mint">Verde</option><option value="amber">Ambra</option><option value="rose">Rosa</option></select></label>
+    </div>
+    <label>Voce<select id="sVoice"></select></label>
+    <label>Velocità voce: <span id="sRateVal"></span><input id="sRate" type="range" min="0.7" max="1.5" step="0.05"></label>
+    <label class="check"><input id="sSpeak" type="checkbox"> Risposte a voce</label>
+    <label class="check"><input id="sWake" type="checkbox"> Sempre in ascolto: si attiva quando dici il suo nome</label>
+    <label class="check"><input id="sWeb" type="checkbox"> Ricerca web</label>
+    <label class="check"><input id="sFollow" type="checkbox"> Conversazione continua: dopo aver risposto resta in ascolto per la tua replica</label>
+    <label class="check"><input id="sFetch" type="checkbox"> Lettura di pagine web (beta: si disattiva da sola se non disponibile)</label>
+    <h2>Voce realistica</h2>
+    <label>Motore voce<select id="sEngine"><option value="browser">Voce del dispositivo, gratis</option><option value="eleven">ElevenLabs, realistica</option></select></label>
+    <label>ElevenLabs, API key<input id="sElKey" type="password" autocomplete="off"></label>
+    <div class="row">
+      <label>ElevenLabs, ID voce<input id="sElVoice" autocomplete="off"></label>
+      <label>Modello<select id="sElModel"><option value="eleven_flash_v2_5">Flash, più rapido</option><option value="eleven_multilingual_v2">Multilingual, più espressivo</option></select></label>
+    </div>
+    <h2>Integrazioni facoltative</h2>
+    <label>Home Assistant, indirizzo<input id="sHaUrl" placeholder="https://casa.example.com" autocomplete="off"></label>
+    <label>Home Assistant, token di accesso<input id="sHaToken" type="password" autocomplete="off"></label>
+    <label>Webhook, uno per riga nel formato nome | URL<textarea id="sHooks" rows="3" placeholder="luci giardino | https://esempio.com/hook"></textarea></label>
+    <h2>Sincronizzazione tra dispositivi</h2>
+    <label>Token GitHub con permesso gist<input id="sGh" type="password" autocomplete="off" placeholder="ghp_..."></label>
+    <p class="hint">Chiavi e token restano solo in questo browser: non finiscono né nel backup né nella sincronizzazione. Scorciatoia su PC: Ctrl + Spazio per parlare.</p>
+    <div class="btns">
+      <button type="button" id="sDiag">Controllo sistema</button>
+      <button type="button" id="sTest">Prova voce</button>
+      <button type="button" id="sClear">Nuova conversazione</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgData">
+  <div class="dlg">
+    <h2>Promemoria e timer</h2>
+    <ul id="lRem" class="list"></ul>
+    <h2>Da fare</h2>
+    <div class="row"><input id="todoNew" placeholder="Aggiungi una voce"><button id="todoAdd" type="button" class="primary" style="flex:0">Aggiungi</button></div>
+    <ul id="lTodo" class="list"></ul>
+    <h2>Note</h2>
+    <ul id="lNotes" class="list"></ul>
+    <h2>Routine</h2>
+    <ul id="lRoutines" class="list"></ul>
+    <h2>Cosa ricorda di te</h2>
+    <ul id="lMem" class="list"></ul>
+    <h2>Sincronizzazione e backup</h2>
+    <p class="hint">Con il token GitHub i dati si allineano da soli tra PC e telefono. Senza, esporta da un dispositivo e importa nell'altro.</p>
+    <p class="hint" id="syncStatus"></p>
+    <div class="btns">
+      <button type="button" id="dExportChat">Esporta conversazione</button>
+      <button type="button" id="dSync">Sincronizza ora</button>
+      <button type="button" id="dExport">Esporta dati</button>
+      <button type="button" id="dImport">Importa dati</button>
+      <button type="button" id="dClose" class="primary">Chiudi</button>
+    </div>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
+</dialog>
+
+<dialog id="dlgDiag">
+  <div class="dlg">
+    <h2>Controllo sistema</h2>
+    <p class="hint">Verifico ogni componente uno alla volta. Il verde è a posto, l'ambra è facoltativo, il rosso va sistemato seguendo l'indicazione.</p>
+    <ul id="lDiag" class="list"></ul>
+    <div class="btns"><button type="button" id="diagRun">Ripeti controllo</button><button type="button" id="diagClose" class="primary">Chiudi</button></div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+/* ================= Stato e persistenza ================= */
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
+};
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', followUp:true, ghToken:'', gistId:'' };
+const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
+const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
+const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
+let settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
+let todos = store.get('todos', []);
+let reminders = store.get('reminders', []);
+let memory = store.get('memory', []);
+let notes = store.get('notes', []);
+let routines = store.get('routines', null);
+if (!routines){
+  routines = [{ id:'r1', name:'buongiorno', instructions:"Dimmi il meteo di oggi nella mia posizione con alba e tramonto, i promemoria di oggi, le cose da fare aperte e le tre notizie principali in Italia, in modo scorrevole e breve." },
+              { id:'r2', name:'buonanotte', instructions:"Dimmi i promemoria di domani mattina, il meteo di domani e augurami la buonanotte con una frase spiritosa." }];
+  store.set('routines', routines);
+}
+let history = store.get('history', []);
+let transcript = store.get('transcript', []);
+let meta = store.get('meta', null);
+if (!meta){
+  meta = { updated:{}, synced:false };
+  for (const [k, v] of Object.entries({ todos, reminders, memory, notes })) meta.updated[k] = v.length ? 1 : 0;
+  meta.updated.routines = 0; store.set('meta', meta);
+}
+let busy = false;
+let pending = [];
+const isAndroid = /Android/i.test(navigator.userAgent);
+const uid = () => Math.random().toString(36).slice(2, 8);
+const enc = encodeURIComponent;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const saveSettings = () => store.set('settings', settings);
+function saveCol(k, v){ store.set(k, v); meta.updated[k] = Date.now(); store.set('meta', meta); refreshData(); scheduleSync(); }
+const saveTodos = () => saveCol('todos', todos);
+const saveRem = () => saveCol('reminders', reminders);
+const saveMem = () => saveCol('memory', memory);
+const saveNotes = () => saveCol('notes', notes);
+const saveRoutines = () => saveCol('routines', routines);
+const fmtWhen = ms => new Date(ms).toLocaleString('it-IT', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+const hooks = () => settings.hooks.split('\n').map(l => l.split('|').map(s => s.trim())).filter(p => p.length >= 2 && p[0] && /^https?:\/\//.test(p[1])).map(p => ({ name:p[0], url:p.slice(1).join('|') }));
+const haOn = () => !!(settings.haUrl && settings.haToken);
+
+/* ================= Rete neurale animata ================= */
+const NN = (() => {
+  const cv = $('#nn'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, nodes = [], edges = [], adj = [], pulses = [], rot = 0, last = performance.now();
+  let energy = .12, target = .12, col = [111,211,255], tcol = [111,211,255];
+  const COLORS = { idle:[111,211,255], wake:[91,140,255], listening:[142,240,193], thinking:[242,179,91], speaking:[111,211,255] };
+  const LEVEL = { idle:.12, wake:.2, listening:.45, thinking:.9, speaking:.5 };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function build(){
+    const n = innerWidth < 600 ? 72 : 110, shell = Math.round(n * .72), ga = Math.PI * (3 - Math.sqrt(5));
+    nodes = [];
+    for (let i = 0; i < shell; i++){ const y = 1 - (i / (shell - 1)) * 2, r = Math.sqrt(1 - y * y), th = ga * i; nodes.push({ x:Math.cos(th) * r, y, z:Math.sin(th) * r, g:0 }); }
+    for (let i = shell; i < n; i++){ const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, rr = Math.cbrt(Math.random()) * .7, r = Math.sqrt(1 - u * u); nodes.push({ x:Math.cos(th) * r * rr, y:u * rr, z:Math.sin(th) * r * rr, g:0 }); }
+    edges = []; adj = nodes.map(() => []); const seen = new Set();
+    nodes.forEach((a, i) => {
+      nodes.map((b, j) => [j, (a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2]).filter(p => p[0] !== i).sort((p, q) => p[1] - q[1]).slice(0, 3)
+        .forEach(([j]) => { const k = i < j ? i + '-' + j : j + '-' + i; if (seen.has(k)) return; seen.add(k); edges.push([i, j]); adj[i].push(j); adj[j].push(i); });
+    });
+  }
+  function resize(){ const dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  function fire(i, fan = 2){ nodes[i].g = 1; const nb = adj[i]; for (let k = 0; k < fan && pulses.length < 320; k++){ pulses.push({ a:i, b:nb[Math.floor(Math.random() * nb.length)], t:0, v:.0014 + Math.random() * .002 }); } }
+  function proj(p){
+    const cy = Math.cos(rot), sy = Math.sin(rot), x = p.x * cy - p.z * sy, z = p.x * sy + p.z * cy;
+    const y = p.y * .94 - z * .34, z2 = p.y * .34 + z * .94, R = Math.min(W, H) * .42, s = 2.8 / (2.8 + z2);
+    return [W / 2 + x * R * s, H / 2 + y * R * s, z2, s];
+  }
+  function frame(now){
+    const dt = Math.min(50, now - last); last = now;
+    energy += (target - energy) * .04; for (let k = 0; k < 3; k++) col[k] += (tcol[k] - col[k]) * .06;
+    rot += dt * (reduce ? .00003 : .00007 + energy * .00025);
+    if (Math.random() < energy * dt * .012) fire(Math.floor(Math.random() * nodes.length), 1 + Math.round(energy * 2));
+    const P = nodes.map(proj), [r, g, b] = col.map(Math.round);
+    ctx.clearRect(0, 0, W, H);
+    const cg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.min(W, H) * .3);
+    cg.addColorStop(0, `rgba(${r},${g},${b},${.08 + energy * .16})`); cg.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = cg; ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+    for (const [i, j] of edges){ const a = P[i], c = P[j]; ctx.strokeStyle = `rgba(${r},${g},${b},${.05 + (2 - a[2] - c[2]) * .05})`; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.stroke(); }
+    ctx.globalCompositeOperation = 'lighter';
+    pulses = pulses.filter(p => {
+      p.t += p.v * dt;
+      if (p.t >= 1){ nodes[p.b].g = 1; if (Math.random() < energy * .55) fire(p.b, 1); return false; }
+      const a = P[p.a], c = P[p.b], x = a[0] + (c[0] - a[0]) * p.t, y = a[1] + (c[1] - a[1]) * p.t;
+      ctx.fillStyle = `rgba(${r},${g},${b},.18)`; ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.283); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, 6.283); ctx.fill();
+      return true;
+    });
+    nodes.forEach((n, i) => {
+      const p = P[i]; n.g *= .94;
+      const size = (1.3 + n.g * 3) * p[3];
+      ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, .3 + (1 - p[2]) * .25 + n.g * .5)})`;
+      ctx.beginPath(); ctx.arc(p[0], p[1], size, 0, 6.283); ctx.fill();
+      if (n.g > .2){ ctx.fillStyle = `rgba(${r},${g},${b},${n.g * .22})`; ctx.beginPath(); ctx.arc(p[0], p[1], size * 4, 0, 6.283); ctx.fill(); }
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(frame);
+  }
+  build(); resize(); addEventListener('resize', resize); requestAnimationFrame(frame);
+  let labelT, cur = 'idle';
+  return {
+    setState(s){ cur = s; target = LEVEL[s] ?? .12; tcol = COLORS[s] || COLORS.idle; },
+    setAccent(rgb){ COLORS.idle = rgb; COLORS.speaking = rgb; if (cur === 'idle' || cur === 'speaking') tcol = rgb; },
+    burst(n = 6){ for (let k = 0; k < n; k++) fire(Math.floor(Math.random() * nodes.length), 3); },
+    pulse(){ fire(Math.floor(Math.random() * nodes.length), 2); },
+    label(t){ const el = $('#nnLabel'); el.textContent = t; el.classList.add('on'); clearTimeout(labelT); labelT = setTimeout(() => el.classList.remove('on'), 2200); }
+  };
+})();
+
+/* ================= Interfaccia ================= */
+const STATUS = { idle:'Pronto', listening:'Ti ascolto…', thinking:'Ci penso…', speaking:'Parlo…' };
+function setState(s){
+  document.body.className = 's-' + s; NN.setState(s);
+  $('#status').textContent = s === 'wake' ? `In ascolto: di' "${settings.name}"` : STATUS[s];
+}
+function scrollLog(){ const l = $('#log'); l.scrollTop = l.scrollHeight; }
+function addMsg(kind, text){
+  const d = document.createElement('div');
+  d.className = (kind.startsWith('tool') || kind.startsWith('err')) ? kind : 'msg ' + kind;
+  d.textContent = text; $('#log').appendChild(d); scrollLog(); return d;
+}
+function addActions(list, extra){
+  const box = document.createElement('div');
+  box.className = 'chips' + (extra ? ' ' + extra : '');
+  for (const a of list){
+    let el;
+    if (a.fn){ el = document.createElement('button'); el.onclick = a.fn; }
+    else {
+      el = document.createElement('a'); el.href = a.url;
+      if (/^https?:/.test(a.url)){ el.target = '_blank'; el.rel = 'noopener'; }
+      if (a.download) el.download = a.download;
+    }
+    el.className = 'chip'; el.textContent = a.label; box.appendChild(el);
+  }
+  $('#log').appendChild(box); scrollLog();
+}
+function addImage(url, right){ const i = document.createElement('img'); i.src = url; i.className = 'shot' + (right ? ' right' : ''); i.alt = 'Immagine'; $('#log').appendChild(i); i.onload = scrollLog; }
+let toastT;
+function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 3200); }
+const cleanText = t => String(t).replace(/\*\*|__|`|^#+\s*/gm, '').replace(/^\s*[-*]\s+/gm, '').trim();
+
+/* ================= Audio e notifiche ================= */
+let actx;
+function chime(n = 1){
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    for (let i = 0; i < n; i++){
+      const t = actx.currentTime + i * 0.35, o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(880, t); o.frequency.exponentialRampToValueAtTime(1320, t + 0.12);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.32);
+    }
+  }catch(e){}
+}
+let amb = null;
+function stopAmbient(){
+  if (!amb) return;
+  const a = amb; amb = null; clearTimeout(a.timer);
+  try{ a.gain.gain.setTargetAtTime(0, actx.currentTime, .4); setTimeout(() => { try{ a.src.stop(); }catch(e){} }, 1500); }catch(e){}
+}
+function startAmbient(kind, minutes){
+  stopAmbient();
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
+  const n = actx.sampleRate * 4, buf = actx.createBuffer(2, n, actx.sampleRate);
+  for (let ch = 0; ch < 2; ch++){
+    const d = buf.getChannelData(ch); let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+    for (let i = 0; i < n; i++){
+      const w = Math.random() * 2 - 1;
+      if (kind === 'white') d[i] = w * .5;
+      else if (kind === 'brown'){ last = (last + .02 * w) / 1.02; d[i] = last * 3.5; }
+      else { b0 = .99886 * b0 + w * .0555179; b1 = .99332 * b1 + w * .0750759; b2 = .96900 * b2 + w * .1538520; b3 = .86650 * b3 + w * .3104856; b4 = .55000 * b4 + w * .5329522; b5 = -.7616 * b5 - w * .0168980; d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * .5362) * .11; b6 = w * .115926; }
+    }
+  }
+  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const filt = actx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = kind === 'rain' ? 1400 : kind === 'ocean' ? 500 : 12000;
+  const gain = actx.createGain(); gain.gain.value = 0; src.connect(filt).connect(gain).connect(actx.destination);
+  const level = kind === 'ocean' ? .55 : .35;
+  if (kind === 'ocean'){ const lfo = actx.createOscillator(), lg = actx.createGain(); lfo.frequency.value = .08; lg.gain.value = .3; lfo.connect(lg).connect(gain.gain); lfo.start(); }
+  src.start(); gain.gain.setTargetAtTime(level, actx.currentTime, 1.5);
+  amb = { src, gain, level, timer:setTimeout(stopAmbient, Math.min(Math.max(minutes || 30, 1), 480) * 60000) };
+}
+function duckAmbient(on){ if (amb) try{ amb.gain.gain.setTargetAtTime(on ? amb.level * .2 : amb.level, actx.currentTime, .3); }catch(e){} }
+let swReg = null;
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  navigator.serviceWorker.register('sw.js').then(r => swReg = r).catch(() => {});
+}
+function notify(text){
+  try{ navigator.vibrate && navigator.vibrate([300, 150, 300]); }catch(e){}
+  try{
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (swReg) swReg.showNotification(settings.name, { body:text, icon:'icon-192.png', tag:'j' + Date.now() });
+    else new Notification(settings.name, { body:text });
+  }catch(e){}
+}
+
+/* ================= Voce: sintesi (coda, streaming, ElevenLabs) ================= */
+let voices = [];
+function loadVoices(){
+  if (!('speechSynthesis' in window)) return;
+  voices = speechSynthesis.getVoices();
+  const sel = $('#sVoice'); sel.innerHTML = '';
+  const list = voices.filter(v => v.lang.toLowerCase().startsWith(settings.lang.slice(0, 2).toLowerCase()));
+  (list.length ? list : voices).forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = `${v.name} (${v.lang})`; sel.appendChild(o); });
+  if (settings.voiceURI) sel.value = settings.voiceURI;
+}
+if ('speechSynthesis' in window){ speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); }
+const tts = { q:[], busy:false, speaking:false, token:0, waiters:[], wasWake:false, mutedTurn:false, audio:null, utt:null, elDisabled:false, elWarned:false };
+const useEleven = () => settings.tts === 'eleven' && settings.elKey && !tts.elDisabled;
+const ttsIdle = () => !tts.busy && !tts.q.length;
+const ttsWait = () => new Promise(res => ttsIdle() ? res() : tts.waiters.push(res));
+function stopSpeaking(mute){
+  tts.token++; tts.q = []; tts.busy = false; if (mute) tts.mutedTurn = true;
+  try{ speechSynthesis.cancel(); }catch(e){}
+  if (tts.audio){ try{ tts.audio.pause(); }catch(e){} tts.audio = null; }
+  if (tts.speaking){ tts.speaking = false; setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+  tts.waiters.splice(0).forEach(f => f());
+  if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
+}
+function splitSpeech(text){
+  const clean = cleanText(text).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
+  const sentences = clean.match(/[^.!?;:\n]+[.!?;:\n]*\s*/g) || [clean];
+  const parts = []; let buf = '';
+  for (const s of sentences){ if ((buf + s).length > 220 && buf){ parts.push(buf); buf = ''; } buf += s; }
+  if (buf.trim()) parts.push(buf);
+  return parts;
+}
+function enqueueSpeech(text, opts = {}){
+  if ((!settings.speak && !opts.force) || (tts.mutedTurn && !opts.force) || !text || !text.trim()) return;
+  for (const p of splitSpeech(text)) tts.q.push({ text:p, lang:opts.lang || settings.lang, own:!!opts.lang });
+  pump();
+}
+function speak(text, opts = {}){ enqueueSpeech(text, opts); return ttsWait(); }
+function makeStreamSpeaker(){
+  let buf = '';
+  return {
+    push(t){
+      buf += t; const re = /[.!?;:\n]\s/g; let m, cut = -1;
+      while ((m = re.exec(buf))) cut = m.index + 1;
+      if (cut >= 20){ enqueueSpeech(buf.slice(0, cut)); buf = buf.slice(cut); }
+    },
+    flush(){ if (buf.trim()) enqueueSpeech(buf); buf = ''; }
+  };
+}
+function speakBrowser(item){
+  return new Promise(res => {
+    if (!('speechSynthesis' in window)) return res();
+    const l = item.lang.toLowerCase();
+    const voice = item.own
+      ? (voices.find(v => v.lang.toLowerCase() === l) || voices.find(v => v.lang.toLowerCase().startsWith(l.slice(0, 2))))
+      : (voices.find(v => v.voiceURI === settings.voiceURI) || voices.find(v => v.lang.toLowerCase().startsWith(settings.lang.slice(0, 2).toLowerCase())));
+    const u = new SpeechSynthesisUtterance(item.text); tts.utt = u;
+    u.lang = item.lang; u.rate = settings.rate; if (voice) u.voice = voice;
+    let done = false; const fin = () => { if (!done){ done = true; res(); } };
+    u.onboundary = () => NN.pulse(); u.onend = fin; u.onerror = fin;
+    setTimeout(fin, 4000 + item.text.length * 110 / settings.rate);
+    NN.pulse(); speechSynthesis.speak(u);
+  });
+}
+async function elFetch(item){
+  const body = { text:item.text, model_id:settings.elModel };
+  if (/flash|turbo/.test(settings.elModel)) body.language_code = item.lang.slice(0, 2).toLowerCase();
+  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${enc(settings.elVoice || DEFAULTS.elVoice)}?output_format=mp3_44100_128`,
+    { method:'POST', headers:{ 'xi-api-key':settings.elKey, 'content-type':'application/json' }, body:JSON.stringify(body) });
+  if (!r.ok){
+    let m = 'HTTP ' + r.status;
+    try{ const j = await r.json(); m = (j.detail && (j.detail.message || (typeof j.detail === 'string' ? j.detail : ''))) || m; }catch(e){}
+    const err = new Error(m); err.status = r.status; throw err;
+  }
+  return URL.createObjectURL(await r.blob());
+}
+function elFail(e){
+  if (!tts.elWarned){ toast('Voce ElevenLabs non disponibile, uso quella del dispositivo: ' + e.message); tts.elWarned = true; }
+  if (e.status === 401 || e.status === 402) tts.elDisabled = true;
+}
+let an = null, anBuf = null;
+function playUrl(url){
+  return new Promise(res => {
+    const a = new Audio(url); tts.audio = a;
+    try{
+      if (actx && actx.state === 'running'){
+        const src = actx.createMediaElementSource(a);
+        if (!an){ an = actx.createAnalyser(); an.fftSize = 512; anBuf = new Uint8Array(an.fftSize); an.connect(actx.destination); }
+        src.connect(an);
+      }
+    }catch(e){}
+    const end = ok => { URL.revokeObjectURL(url); if (tts.audio === a) tts.audio = null; res(ok); };
+    a.onended = () => end(true); a.onerror = () => end(false);
+    a.play().catch(() => end(false));
+  });
+}
+setInterval(() => {
+  if (!tts.audio || !an || tts.audio.paused) return;
+  an.getByteTimeDomainData(anBuf); let s = 0;
+  for (const v of anBuf){ const x = (v - 128) / 128; s += x * x; }
+  const rms = Math.sqrt(s / anBuf.length); if (rms > 0.04) NN.pulse(); if (rms > 0.12) NN.pulse();
+}, 90);
+async function pump(){
+  if (tts.busy) return;
+  const item = tts.q.shift();
+  if (!item){
+    if (tts.speaking){ tts.speaking = false; setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+    if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
+    tts.waiters.splice(0).forEach(f => f()); return;
+  }
+  const token = tts.token; tts.busy = true;
+  if (!tts.speaking){ tts.speaking = true; setState('speaking'); duckAmbient(true); }
+  if (recMode === 'wake'){ stopRec(); tts.wasWake = true; }
+  try{
+    let played = false;
+    if (useEleven()){
+      if (!item.audio) item.audio = elFetch(item);
+      const nx = tts.q[0]; if (nx && !nx.audio){ nx.audio = elFetch(nx); nx.audio.catch(() => {}); }
+      try{ const url = await item.audio; played = token === tts.token ? await playUrl(url) : true; }catch(e){ elFail(e); }
+    }
+    if (!played && token === tts.token) await speakBrowser(item);
+  } finally {
+    if (token === tts.token){ tts.busy = false; pump(); }
+  }
+}
+
+/* ================= Voce: riconoscimento ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, recMode = null, pendingWake = null;
+function stopRec(){ if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} rec = null; recMode = null; } }
+function listenCommand(){
+  if (!SR){ toast('Il riconoscimento vocale richiede Chrome o Edge. Puoi comunque scrivere.'); return; }
+  stopRec(); stopSpeaking();
+  rec = new SR(); rec.lang = settings.lang; rec.interimResults = true; rec.continuous = false; recMode = 'command';
+  let final = '';
+  rec.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript; }
+    $('#live').textContent = final + interim; NN.pulse();
+  };
+  rec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Microfono: ' + e.error); };
+  rec.onend = () => {
+    rec = null; recMode = null; $('#live').textContent = '';
+    if (final.trim()) handleUser(final.trim(), pending.splice(0), { voice:true }); else { setState('idle'); resumeWake(); }
+    renderPending();
+  };
+  try{ rec.start(); setState('listening'); }catch(e){ rec = null; recMode = null; }
+}
+function startWake(){
+  if (!SR || !settings.wake || busy || rec) return;
+  rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'wake';
+  rec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++){
+      if (!e.results[i].isFinal) continue;
+      const t = e.results[i][0].transcript.trim(), tl = t.toLowerCase();
+      for (const nm of wakeNames()){ const idx = tl.indexOf(nm); if (idx >= 0){ pendingWake = t.slice(idx + nm.length).replace(/^[\s,.!?]+/, ''); rec.stop(); return; } }
+    }
+  };
+  rec.onerror = e => { if (e.error === 'not-allowed'){ settings.wake = false; saveSettings(); toast('Permesso microfono negato'); } };
+  rec.onend = () => {
+    rec = null; recMode = null;
+    if (pendingWake !== null){
+      const c = pendingWake; pendingWake = null;
+      if (c.length > 2) handleUser(c, [], { voice:true }); else { chime(); listenCommand(); }
+    } else if (settings.wake && !busy) setTimeout(startWake, 300);
+    else setState('idle');
+  };
+  try{ rec.start(); setState('wake'); }catch(e){ rec = null; recMode = null; }
+}
+function resumeWake(){ if (settings.wake) setTimeout(startWake, 400); }
+let pendingDictation = null, dictation = null;
+function startDictation(opts){
+  pendingDictation = null;
+  if (!SR){ toast('Dettatura non disponibile'); return; }
+  stopRec(); stopSpeaking();
+  dictation = { title:opts.title || 'Dettatura ' + new Date().toLocaleString('it-IT', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }), text:'', stop:false };
+  const bubble = addMsg('user', ''); dictation.bubble = bubble;
+  document.body.className = 's-listening'; NN.setState('listening'); $('#status').textContent = 'Dettatura: di\' "fine dettatura" o tocca la rete per chiudere'; chime(2);
+  const run = () => {
+    if (!dictation || dictation.stop) return;
+    rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = true; recMode = 'dictation';
+    rec.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal){
+          const m = t.match(/^(.*?)\b(?:fine|stop|basta|chiudi)\s+(?:la\s+)?dettatura\b/i);
+          if (m){ dictation.text += m[1]; dictation.stop = true; rec.stop(); break; }
+          dictation.text += t + ' ';
+        } else interim += t;
+      }
+      bubble.textContent = (dictation.text + interim).trim(); scrollLog(); NN.pulse();
+    };
+    rec.onerror = e => { if (e.error === 'not-allowed') dictation.stop = true; };
+    rec.onend = () => { rec = null; recMode = null; if (dictation && !dictation.stop) setTimeout(run, 200); else finishDictation(); };
+    try{ rec.start(); }catch(e){ rec = null; recMode = null; finishDictation(); }
+  };
+  run();
+}
+function finishDictation(){
+  const d = dictation; if (!d) return; dictation = null;
+  const text = d.text.replace(/\s+/g, ' ').trim();
+  if (!text){ d.bubble.remove(); addMsg('bot dim', 'Dettatura vuota, nessuna nota salvata.'); setState('idle'); resumeWake(); return; }
+  notes.push({ id:uid(), title:d.title, text, created:Date.now() }); saveNotes();
+  d.bubble.textContent = text; logT('user', '[dettatura] ' + text);
+  const msg = `Nota "${d.title}" salvata: ${text.split(' ').length} parole.`; addMsg('bot', msg); logT('bot', msg); chime(1);
+  setState('idle'); speak(msg).then(() => { if (!busy) resumeWake(); });
+}
+function stopDictation(){ if (!dictation) return; dictation.stop = true; if (rec && recMode === 'dictation') rec.stop(); else finishDictation(); }
+let wakeLock = null;
+async function keepAwake(on){
+  try{
+    if (on && 'wakeLock' in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => wakeLock = null); }
+    else if (!on && wakeLock){ await wakeLock.release(); wakeLock = null; }
+  }catch(e){}
+}
+
+/* ================= Allegati ================= */
+function fileB64(f){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = () => rej(new Error('Lettura non riuscita')); r.readAsDataURL(f); }); }
+function grab(src, w, h, max){
+  const sc = Math.min(1, max / Math.max(w, h)), c = document.createElement('canvas');
+  c.width = Math.round(w * sc); c.height = Math.round(h * sc); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function resizeImage(f){
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { const u = grab(img, img.width, img.height, 1568); URL.revokeObjectURL(img.src); res(u); };
+    img.onerror = () => rej(new Error(f.name + ': immagine non leggibile'));
+    img.src = URL.createObjectURL(f);
+  });
+}
+async function readAttachment(f){
+  if (f.size > 20e6) throw new Error(f.name + ': file oltre 20 MB');
+  if (f.type.startsWith('image/')){ const url = await resizeImage(f); return { kind:'image', name:f.name, data:url.split(',')[1], preview:url }; }
+  if (f.type === 'application/pdf') return { kind:'pdf', name:f.name, data:await fileB64(f) };
+  return { kind:'text', name:f.name, text:(await f.text()).slice(0, 100000) };
+}
+function attachmentBlocks(list){
+  return list.map(a => a.kind === 'image' ? { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:a.data } }
+    : a.kind === 'pdf' ? { type:'document', source:{ type:'base64', media_type:'application/pdf', data:a.data }, title:a.name }
+    : { type:'text', text:`File "${a.name}":\n${a.text}` });
+}
+function renderPending(){
+  const box = $('#pending'); box.innerHTML = '';
+  pending.forEach((a, i) => {
+    const c = document.createElement('span'); c.className = 'pchip'; c.textContent = '📎 ' + a.name;
+    const x = document.createElement('button'); x.textContent = '✕'; x.setAttribute('aria-label', 'Rimuovi allegato');
+    x.onclick = () => { pending.splice(i, 1); renderPending(); }; c.appendChild(x); box.appendChild(c);
+  });
+}
+function cameraOverlay(stream){
+  const wrap = document.createElement('div'); wrap.className = 'camwrap';
+  const v = document.createElement('video'); v.playsInline = true; v.muted = true; v.autoplay = true; v.srcObject = stream;
+  wrap.appendChild(v); document.body.appendChild(wrap);
+  return { v, close:() => wrap.remove() };
+}
+const openCamera = (facing = 'back') => navigator.mediaDevices.getUserMedia({ video:{ facingMode:facing === 'front' ? 'user' : { ideal:'environment' }, width:{ ideal:1280 } } });
+async function shareScreen(question){
+  try{
+    const s = await navigator.mediaDevices.getDisplayMedia({ video:true });
+    const v = document.createElement('video'); v.muted = true; v.srcObject = s; await v.play(); await sleep(500);
+    const url = grab(v, v.videoWidth, v.videoHeight, 1568); s.getTracks().forEach(t => t.stop());
+    handleUser(question || 'Guarda il mio schermo e dimmi cosa vedi.', [{ kind:'image', name:'schermo', data:url.split(',')[1], preview:url }]);
+  }catch(e){ toast('Condivisione annullata'); }
+}
+
+/* ================= Strumenti ================= */
+const WMO = {0:'sereno',1:'prevalentemente sereno',2:'parzialmente nuvoloso',3:'coperto',45:'nebbia',48:'nebbia con brina',51:'pioviggine debole',53:'pioviggine',55:'pioviggine intensa',56:'pioviggine gelata',57:'pioviggine gelata intensa',61:'pioggia debole',63:'pioggia',65:'pioggia forte',66:'pioggia gelata',67:'pioggia gelata forte',71:'neve debole',73:'neve',75:'neve forte',77:'granelli di neve',80:'rovesci deboli',81:'rovesci',82:'rovesci violenti',85:'rovesci di neve',86:'forti rovesci di neve',95:'temporale',96:'temporale con grandine',99:'temporale con grandine forte'};
+function getPosition(){
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('Geolocalizzazione non disponibile'));
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat:+p.coords.latitude.toFixed(4), lon:+p.coords.longitude.toFixed(4), precisione_m:Math.round(p.coords.accuracy) }),
+      e => rej(new Error('Posizione non disponibile: ' + e.message)), { timeout:10000, maximumAge:600000 });
+  });
+}
+async function geocode(city){
+  const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${enc(city)}&count=1&language=it`)).json();
+  if (!g.results || !g.results.length) throw new Error('Luogo non trovato: ' + city);
+  const x = g.results[0];
+  return { lat:x.latitude, lon:x.longitude, timezone:x.timezone, name:[x.name, x.admin1, x.country].filter(Boolean).join(', ') };
+}
+async function place(city){ if (city) return geocode(city); const p = await getPosition(); return { lat:p.lat, lon:p.lon, name:'posizione attuale' }; }
+function launch(url, label){
+  let w = null;
+  try{ w = window.open(url, '_blank'); if (w) w.opener = null; }catch(e){}
+  addActions([{ label, url }]);
+  return w ? { aperto:true } : { aperto:false, nota:"Il browser ha bloccato l'apertura automatica: è comparso un pulsante da toccare" };
+}
+const icsEsc = s => String(s || '').replace(/\\/g, '\\\\').replace(/[;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+const icsUtc = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+function nextOcc(when, rep){
+  const d = new Date(when), now = Date.now();
+  do {
+    if (rep === 'weekly') d.setDate(d.getDate() + 7);
+    else { d.setDate(d.getDate() + 1); if (rep === 'weekdays') while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1); }
+  } while (d.getTime() <= now);
+  return d.getTime();
+}
+let torchStream = null;
+async function haFetch(path, opts = {}){
+  const r = await fetch(settings.haUrl.replace(/\/$/, '') + path, Object.assign({}, opts, { headers:{ Authorization:'Bearer ' + settings.haToken, 'content-type':'application/json' } }));
+  if (!r.ok) throw new Error('Home Assistant ha risposto ' + r.status);
+  return r.json();
+}
+const obj = (props, req) => ({ type:'object', properties:props, ...(req ? { required:req } : {}) });
+const S = { type:'string' }, N = { type:'number' }, I = { type:'integer' }, B = { type:'boolean' };
+
+const BASE_TOOLS = [
+  { name:'get_weather', description:'Meteo attuale e previsioni giornaliere con alba, tramonto e indice UV. Se city manca usa la posizione del dispositivo.', input_schema:obj({ city:S, days:{ type:'integer', description:'1-7, default 3' } }) },
+  { name:'air_quality', description:"Qualità dell'aria attuale (indice europeo, PM2.5, PM10, ozono, pollini dove disponibili).", input_schema:obj({ city:S }) },
+  { name:'world_time', description:'Ora attuale in una città del mondo.', input_schema:obj({ city:S }, ['city']) },
+  { name:'set_timer', description:'Avvia un timer con conto alla rovescia.', input_schema:obj({ seconds:I, label:S }, ['seconds']) },
+  { name:'set_reminder', description:"Promemoria a data e ora precise, anche ricorrente. when in ISO 8601 ora locale senza fuso, es. 2026-10-01T18:30. Con routine, allo scatto esegue automaticamente quella routine invece di limitarsi ad avvisare.", input_schema:obj({ when:S, text:S, repeat:{ type:'string', enum:['none','daily','weekdays','weekly'] }, routine:{ type:'string', description:'nome di una routine esistente da eseguire allo scatto' } }, ['when','text']) },
+  { name:'manage_reminders', description:"Elenca, cancella o rimanda (snooze) promemoria e timer. cancel e snooze accettano id o parte del testo; snooze senza id rimanda l'ultimo promemoria scattato.", input_schema:obj({ action:{ type:'string', enum:['list','cancel','snooze'] }, id:S, minutes:I }, ['action']) },
+  { name:'manage_todo', description:'Lista delle cose da fare e della spesa. add accetta più voci separate da punto e virgola; done e remove accettano id o parte del testo.', input_schema:obj({ action:{ type:'string', enum:['add','list','done','remove','clear_done'] }, text:S }, ['action']) },
+  { name:'manage_notes', description:'Note di testo lunghe: add, append (aggiunge testo a una nota esistente), list, search (restituisce il testo completo), delete.', input_schema:obj({ action:{ type:'string', enum:['add','append','list','search','delete'] }, title:S, text:S, query:S }, ['action']) },
+  { name:'manage_routines', description:"Routine personalizzate: una frase dell'utente che fa partire una serie di azioni. add (name + instructions), list, delete.", input_schema:obj({ action:{ type:'string', enum:['add','list','delete'] }, name:S, instructions:S }, ['action']) },
+  { name:'remember', description:"Salva in memoria permanente un fatto utile sull'utente (preferenze, persone, numeri, abitudini).", input_schema:obj({ fact:S }, ['fact']) },
+  { name:'forget', description:'Cancella dalla memoria i fatti che contengono il testo indicato.', input_schema:obj({ query:S }, ['query']) },
+  { name:'calculate', description:'Calcolo matematico esatto. Punto per i decimali, virgola tra argomenti. Funzioni: sqrt sin cos tan asin acos atan log(base 10) ln exp abs round floor ceil pow min max, costanti pi e.', input_schema:obj({ expression:S }, ['expression']) },
+  { name:'convert_currency', description:'Converte tra valute tradizionali con i tassi BCE del giorno (EUR, USD, GBP, CHF, JPY...).', input_schema:obj({ amount:N, from:S, to:S }, ['amount','from','to']) },
+  { name:'crypto_price', description:'Prezzo attuale e variazione 24h di criptovalute. coins sono id CoinGecko: bitcoin, ethereum, solana, ripple, cardano, dogecoin...', input_schema:obj({ coins:{ type:'array', items:S }, currency:S }, ['coins']) },
+  { name:'wikipedia', description:'Riassunto di una voce di Wikipedia.', input_schema:obj({ query:S, lang:{ type:'string', description:'default it' } }, ['query']) },
+  { name:'public_holidays', description:'Festività nazionali di un paese in un anno (codice paese ISO a due lettere).', input_schema:obj({ country:S, year:I }, ['country']) },
+  { name:'open_link', description:'Apre un sito o una ricerca su un servizio.', input_schema:obj({ service:{ type:'string', enum:['url','google','youtube','spotify','wikipedia','amazon','maps','news','translate','images'] }, query:S }, ['service','query']) },
+  { name:'navigate', description:'Apre Google Maps con le indicazioni verso una destinazione.', input_schema:obj({ destination:S, mode:{ type:'string', enum:['driving','walking','transit','bicycling'] } }, ['destination']) },
+  { name:'communicate', description:"Prepara chiamata, SMS, WhatsApp, Telegram o email: compare un pulsante che l'utente tocca per confermare. Per WhatsApp serve il numero con prefisso internazionale.", input_schema:obj({ channel:{ type:'string', enum:['call','sms','whatsapp','telegram','email'] }, to:S, text:S, subject:S }, ['channel']) },
+  { name:'add_calendar_event', description:'Prepara un evento di calendario (Google Calendar o file .ics). start ed end in ISO 8601 ora locale.', input_schema:obj({ title:S, start:S, end:S, location:S, details:S }, ['title','start']) },
+  { name:'look', description:"Scatta una foto con la fotocamera (mostra l'anteprima un attimo per inquadrare) e te la passa. Per: cosa vedi, leggere testi, riconoscere oggetti, piante, piatti, etichette.", input_schema:obj({ camera:{ type:'string', enum:['back','front'] } }) },
+  { name:'look_screen', description:"Guarda lo schermo del PC: compare un pulsante che l'utente tocca per condividere lo schermo, poi riceverai l'immagine in un nuovo messaggio.", input_schema:obj({ question:S }) },
+  { name:'scan_code', description:'Scansiona un codice QR o a barre con la fotocamera e restituisce il contenuto.', input_schema:obj({}) },
+  { name:'flashlight', description:'Accende o spegne la torcia del telefono.', input_schema:obj({ on:B }, ['on']) },
+  { name:'say', description:"Pronuncia un testo in un'altra lingua con la voce adatta, per far sentire la pronuncia. lang in formato BCP-47, es. en-US, ja-JP, es-ES.", input_schema:obj({ text:S, lang:S }, ['text','lang']) },
+  { name:'device_status', description:'Batteria, rete, piattaforma e, se richiesta, posizione del dispositivo.', input_schema:obj({ include_location:B }) },
+  { name:'copy_to_clipboard', description:'Copia un testo negli appunti.', input_schema:obj({ text:S }, ['text']) },
+  { name:'random', description:'Moneta, dado, numero casuale, scelta tra opzioni o password sicura.', input_schema:obj({ kind:{ type:'string', enum:['coin','dice','number','pick','password'] }, min:I, max:I, sides:I, length:I, options:{ type:'array', items:S } }, ['kind']) },
+  { name:'set_voice', description:'Attiva o disattiva le risposte a voce e/o regola la velocità della voce (0.7 lenta, 1 normale, 1.5 veloce).', input_schema:obj({ enabled:B, rate:N }) },
+  { name:'stopwatch', description:'Cronometro: start, lap (giro), stop (restituisce il tempo), status, reset.', input_schema:obj({ action:{ type:'string', enum:['start','lap','stop','status','reset'] } }, ['action']) },
+  { name:'ambient', description:'Riproduce un suono di sottofondo rilassante (pioggia, mare, rumore bianco, rosa, marrone) per un certo numero di minuti, oppure lo spegne con off. Si abbassa da solo mentre parli.', input_schema:obj({ sound:{ type:'string', enum:['rain','ocean','white','pink','brown','off'] }, minutes:I }, ['sound']) },
+  { name:'where_am_i', description:"Indirizzo e città della posizione attuale dell'utente.", input_schema:obj({}) },
+  { name:'find_nearby', description:'Cerca luoghi vicino alla posizione attuale (farmacia, benzinaio, ristorante, bancomat...) e restituisce nome, distanza e indirizzo.', input_schema:obj({ query:S, radius_km:N }, ['query']) },
+  { name:'pick_contact', description:"Fa scegliere all'utente un contatto dalla rubrica del telefono (solo Android). Riceverai nome e numero in un nuovo messaggio. purpose = cosa farai con il contatto.", input_schema:obj({ purpose:S }) },
+  { name:'share', description:"Condivide un testo o un link tramite il menu di condivisione del dispositivo (WhatsApp, email, note...): compare un pulsante che l'utente tocca.", input_schema:obj({ title:S, text:S, url:S }) },
+  { name:'dictate', description:"Avvia la dettatura di un testo lungo che viene salvato come nota: l'utente parla liberamente e chiude dicendo \"fine dettatura\". Usala quando vuole dettare un testo, un'idea o un messaggio lungo.", input_schema:obj({ title:S }) },
+  { name:'keep_screen_on', description:'Mantiene lo schermo acceso (on) o torna al comportamento normale (off).', input_schema:obj({ on:B }, ['on']) }
+];
+function getTools(){
+  const t = [...BASE_TOOLS];
+  if (haOn()){
+    t.push({ name:'home_states', description:'Elenca dispositivi e sensori di Home Assistant con il loro stato. search filtra per nome o entity_id (es. luce, cucina, sensor.temperatura).', input_schema:obj({ search:S }) });
+    t.push({ name:'home_control', description:'Comanda Home Assistant: domain e service (es. light turn_on, switch toggle, climate set_temperature, cover open_cover, scene turn_on), entity_id e dati extra (es. brightness_pct, temperature). Se non conosci entity_id usa prima home_states.', input_schema:obj({ domain:S, service:S, entity_id:S, data:{ type:'object' } }, ['domain','service']) });
+  }
+  const h = hooks();
+  if (h.length) t.push({ name:'call_webhook', description:'Attiva un webhook configurato dall\'utente. Disponibili: ' + h.map(x => x.name).join(', '), input_schema:obj({ name:{ type:'string', enum:h.map(x => x.name) }, payload:{ type:'object' } }, ['name']) });
+  if (settings.web) t.push({ type:'web_search_20250305', name:'web_search', max_uses:4 });
+  if (settings.fetch) t.push({ type:'web_fetch_20250910', name:'web_fetch', max_uses:3 });
+  return t;
+}
+const TOOL_LABEL = { get_weather:'meteo', air_quality:"qualità dell'aria", world_time:'fusi orari', set_timer:'timer', set_reminder:'promemoria', manage_reminders:'promemoria', manage_todo:'lista', manage_notes:'note', manage_routines:'routine', remember:'memoria', forget:'memoria', calculate:'calcolo', convert_currency:'cambio valuta', crypto_price:'cripto', wikipedia:'Wikipedia', public_holidays:'festività', open_link:'apertura', navigate:'navigatore', communicate:'messaggi', add_calendar_event:'calendario', look:'fotocamera', look_screen:'schermo', scan_code:'scanner', flashlight:'torcia', say:'pronuncia', device_status:'dispositivo', copy_to_clipboard:'appunti', random:'caso', set_voice:'voce', home_states:'casa', home_control:'casa', call_webhook:'webhook', web_search:'ricerca web', web_fetch:'lettura pagina', stopwatch:'cronometro', ambient:'suoni', where_am_i:'posizione', find_nearby:'vicino a te', pick_contact:'rubrica', share:'condivisione', dictate:'dettatura', keep_screen_on:'schermo' };
+
+const IMPL = {
+  async get_weather({ city, days = 3 }){
+    const p = await place(city); days = Math.min(Math.max(days || 3, 1), 7);
+    const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max&timezone=auto&forecast_days=${days}`)).json();
+    const hm = s => s ? s.slice(11, 16) : null;
+    return {
+      luogo:p.name,
+      adesso:{ temperatura:w.current.temperature_2m, percepita:w.current.apparent_temperature, umidita:w.current.relative_humidity_2m, vento_kmh:w.current.wind_speed_10m, cielo:WMO[w.current.weather_code] },
+      giorni:w.daily.time.map((d, i) => ({ data:d, cielo:WMO[w.daily.weather_code[i]], min:w.daily.temperature_2m_min[i], max:w.daily.temperature_2m_max[i], prob_pioggia:w.daily.precipitation_probability_max[i], alba:hm(w.daily.sunrise[i]), tramonto:hm(w.daily.sunset[i]), uv_max:w.daily.uv_index_max[i] }))
+    };
+  },
+  async air_quality({ city }){
+    const p = await place(city);
+    const a = await (await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat}&longitude=${p.lon}&current=european_aqi,pm10,pm2_5,ozone,nitrogen_dioxide,uv_index,grass_pollen,birch_pollen,ragweed_pollen`)).json();
+    return { luogo:p.name, ...a.current, scala_aqi:'0-20 buona, 20-40 discreta, 40-60 moderata, 60-80 scadente, 80-100 molto scadente, oltre 100 pessima' };
+  },
+  async world_time({ city }){
+    const g = await geocode(city);
+    return { luogo:g.name, fuso:g.timezone, ora:new Date().toLocaleString('it-IT', { timeZone:g.timezone, weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }) };
+  },
+  set_timer({ seconds, label }){
+    if (!(seconds > 0)) return { error:'Durata non valida' };
+    const r = { id:uid(), when:Date.now() + seconds * 1000, text:label || 'Timer', kind:'timer' };
+    reminders.push(r); saveRem(); return { ok:true, id:r.id, scade:fmtWhen(r.when) };
+  },
+  set_reminder({ when, text, repeat = 'none', routine = '' }){
+    let t = new Date(when).getTime();
+    if (isNaN(t)) return { error:'Data non valida' };
+    if (t < Date.now() - 60000){ if (repeat === 'none') return { error:'La data è nel passato' }; t = nextOcc(t, repeat); }
+    const r = { id:uid(), when:t, text, kind:'promemoria', repeat, routine:routine || '' };
+    reminders.push(r); saveRem(); return { ok:true, id:r.id, quando:fmtWhen(t), ripetizione:repeat };
+  },
+  manage_reminders({ action, id = '', minutes = 10 }){
+    if (action === 'list') return { elenco:[...reminders].sort((a, b) => a.when - b.when).map(r => ({ id:r.id, tipo:r.kind, testo:r.text, quando:fmtWhen(r.when), ripetizione:r.repeat || 'none', tra_minuti:Math.round((r.when - Date.now()) / 60000) })) };
+    if (action === 'cancel' || action === 'snooze'){
+      const q = id.toLowerCase();
+      let r = id ? (reminders.find(x => x.id === id) || reminders.find(x => x.text.toLowerCase().includes(q))) : null;
+      if (!r && action === 'snooze' && lastFired){ r = Object.assign({}, lastFired, { id:uid(), repeat:'none' }); reminders.push(r); }
+      if (!r) return { error:id ? 'Non trovato' : 'Indica id o testo' };
+      if (action === 'snooze'){ r.when = Date.now() + Math.max(1, minutes || 10) * 60000; saveRem(); return { rimandato:r.text, a:fmtWhen(r.when) }; }
+      reminders = reminders.filter(x => x !== r); saveRem(); return { cancellato:r.text };
+    }
+    return { error:'Azione sconosciuta' };
+  },
+  manage_todo({ action, text = '' }){
+    const q = text.toLowerCase().trim();
+    const find = () => todos.find(t => t.id === text) || todos.find(t => !t.done && t.text.toLowerCase().includes(q)) || todos.find(t => t.text.toLowerCase().includes(q));
+    switch (action){
+      case 'add': {
+        const items = text.split(/\s*;\s*/).map(s => s.trim()).filter(Boolean);
+        if (!items.length) return { error:'Testo mancante' };
+        items.forEach(x => todos.push({ id:uid(), text:x, done:false })); saveTodos(); return { aggiunte:items };
+      }
+      case 'list': return { da_fare:todos.filter(t => !t.done).map(t => ({ id:t.id, testo:t.text })), completate:todos.filter(t => t.done).slice(-5).map(t => t.text) };
+      case 'done': case 'remove': {
+        if (!q) return { error:'Indica la voce' };
+        const t = find(); if (!t) return { error:'Voce non trovata' };
+        if (action === 'done') t.done = true; else todos = todos.filter(x => x !== t);
+        saveTodos(); return { ok:true, voce:t.text };
+      }
+      case 'clear_done': { const n = todos.filter(t => t.done).length; todos = todos.filter(t => !t.done); saveTodos(); return { rimosse:n }; }
+    }
+    return { error:'Azione sconosciuta' };
+  },
+  manage_notes({ action, title = '', text = '', query = '' }){
+    const q = (query || title).toLowerCase().trim();
+    const match = n => n.id === q || n.title.toLowerCase().includes(q) || n.text.toLowerCase().includes(q);
+    switch (action){
+      case 'add': { if (!text) return { error:'Testo mancante' }; const n = { id:uid(), title:title || text.slice(0, 40), text, created:Date.now() }; notes.push(n); saveNotes(); return { ok:true, titolo:n.title }; }
+      case 'append': { const n = notes.find(match); if (!n || !q) return { error:'Nota non trovata' }; n.text += '\n' + text; saveNotes(); return { ok:true, titolo:n.title }; }
+      case 'list': return { note:notes.slice(-40).map(n => ({ id:n.id, titolo:n.title, data:fmtWhen(n.created) })) };
+      case 'search': { const r = notes.filter(match).slice(0, 10); return r.length ? { risultati:r.map(n => ({ id:n.id, titolo:n.title, testo:n.text })) } : { error:'Nessuna nota trovata' }; }
+      case 'delete': { const n = notes.find(match); if (!n || !q) return { error:'Nota non trovata' }; notes = notes.filter(x => x !== n); saveNotes(); return { eliminata:n.title }; }
+    }
+    return { error:'Azione sconosciuta' };
+  },
+  manage_routines({ action, name = '', instructions = '' }){
+    const q = name.toLowerCase().trim();
+    if (action === 'add'){
+      if (!q || !instructions) return { error:'Servono nome e istruzioni' };
+      routines = routines.filter(r => r.name.toLowerCase() !== q);
+      routines.push({ id:uid(), name:q, instructions }); saveRoutines(); return { ok:true };
+    }
+    if (action === 'list') return { routine:routines.map(r => ({ nome:r.name, istruzioni:r.instructions })) };
+    if (action === 'delete'){ const n = routines.length; routines = routines.filter(r => r.name.toLowerCase() !== q); saveRoutines(); return n === routines.length ? { error:'Routine non trovata' } : { ok:true }; }
+    return { error:'Azione sconosciuta' };
+  },
+  remember({ fact }){ memory.push({ id:uid(), fact }); saveMem(); return { ok:true }; },
+  forget({ query }){ const q = query.toLowerCase(), before = memory.length; memory = memory.filter(m => !m.fact.toLowerCase().includes(q)); saveMem(); return { rimossi:before - memory.length }; },
+  calculate({ expression }){
+    const MAP = { sqrt:'Math.sqrt', sin:'Math.sin', cos:'Math.cos', tan:'Math.tan', asin:'Math.asin', acos:'Math.acos', atan:'Math.atan', log:'Math.log10', ln:'Math.log', exp:'Math.exp', abs:'Math.abs', round:'Math.round', floor:'Math.floor', ceil:'Math.ceil', pow:'Math.pow', min:'Math.min', max:'Math.max', pi:'Math.PI', e:'Math.E' };
+    let ex = String(expression).replace(/\^/g, '**').replace(/×/g, '*').replace(/÷/g, '/');
+    if (/[^0-9a-zA-Z_+\-*/%().,\s]/.test(ex)) return { error:'Caratteri non ammessi' };
+    let bad = null;
+    ex = ex.replace(/[a-zA-Z_]+/g, w => MAP[w.toLowerCase()] || (bad = w, ''));
+    if (bad) return { error:'Funzione non supportata: ' + bad };
+    const val = Function('"use strict";return (' + ex + ')')();
+    if (typeof val !== 'number' || !isFinite(val)) return { error:'Risultato non valido' };
+    return { risultato:+val.toPrecision(12) };
+  },
+  async convert_currency({ amount, from, to }){
+    from = from.toUpperCase(); to = to.toUpperCase();
+    const r = await fetch(`https://api.frankfurter.app/latest?amount=${amount}&from=${from}&to=${to}`);
+    if (!r.ok) return { error:'Valuta non supportata: per le criptovalute usa crypto_price' };
+    const d = await r.json(); return { importo:amount, da:from, a:to, risultato:d.rates[to], data_tasso:d.date };
+  },
+  async crypto_price({ coins, currency = 'eur' }){
+    const ids = coins.map(c => c.toLowerCase().trim().replace(/\s+/g, '-')).join(',');
+    const d = await (await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${enc(ids)}&vs_currencies=${currency.toLowerCase()}&include_24hr_change=true`)).json();
+    return Object.keys(d).length ? d : { error:'Criptovaluta non trovata: usa id come bitcoin, ethereum, solana' };
+  },
+  async wikipedia({ query, lang = 'it' }){
+    lang = /^[a-z]{2,3}$/.test(lang) ? lang : 'it';
+    const s = await (await fetch(`https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${enc(query)}&srlimit=1&format=json&origin=*`)).json();
+    const t = s.query && s.query.search && s.query.search[0] && s.query.search[0].title;
+    if (!t) return { error:'Nessuna voce trovata' };
+    const d = await (await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${enc(t.replace(/ /g, '_'))}`)).json();
+    if (d.content_urls) addActions([{ label:'Apri Wikipedia: ' + d.title, url:d.content_urls.desktop.page }]);
+    return { titolo:d.title, riassunto:d.extract };
+  },
+  async public_holidays({ country, year }){
+    year = year || new Date().getFullYear();
+    const r = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country.toUpperCase()}`);
+    if (!r.ok) return { error:'Paese non supportato' };
+    return { festivita:(await r.json()).map(h => ({ data:h.date, nome:h.localName })) };
+  },
+  open_link({ service, query }){
+    const urls = {
+      url: /^https?:\/\//i.test(query) ? query : 'https://' + query,
+      google:'https://www.google.com/search?q=' + enc(query),
+      images:'https://www.google.com/search?tbm=isch&q=' + enc(query),
+      youtube:'https://www.youtube.com/results?search_query=' + enc(query),
+      spotify:'https://open.spotify.com/search/' + enc(query),
+      wikipedia:'https://it.wikipedia.org/w/index.php?search=' + enc(query),
+      amazon:'https://www.amazon.it/s?k=' + enc(query),
+      maps:'https://www.google.com/maps/search/?api=1&query=' + enc(query),
+      news:'https://news.google.com/search?q=' + enc(query) + '&hl=it&gl=IT&ceid=IT:it',
+      translate:'https://translate.google.com/?sl=auto&tl=it&text=' + enc(query)
+    };
+    const url = urls[service]; if (!url) return { error:'Servizio sconosciuto' };
+    return launch(url, service === 'url' ? 'Apri ' + query.replace(/^https?:\/\//, '').slice(0, 40) : `Apri ${service}: ${query.slice(0, 30)}`);
+  },
+  navigate({ destination, mode = 'driving' }){ return launch(`https://www.google.com/maps/dir/?api=1&destination=${enc(destination)}&travelmode=${mode}`, 'Indicazioni per ' + destination); },
+  communicate({ channel, to = '', text = '', subject = '' }){
+    const num = to.replace(/[^\d+]/g, ''); let url, label;
+    switch (channel){
+      case 'call': if (!num) return { error:'Serve un numero di telefono' }; url = 'tel:' + num; label = 'Chiama ' + to; break;
+      case 'sms': url = `sms:${num}?body=${enc(text)}`; label = 'Invia SMS' + (to ? ' a ' + to : ''); break;
+      case 'whatsapp': url = `https://wa.me/${num.replace('+', '')}?text=${enc(text)}`; label = 'Invia su WhatsApp' + (to ? ' a ' + to : ''); break;
+      case 'telegram': url = to && !num ? 'https://t.me/' + to.replace('@', '') : 'https://t.me/share/url?url=%20&text=' + enc(text); label = 'Apri Telegram'; break;
+      case 'email': url = `mailto:${to}?subject=${enc(subject)}&body=${enc(text)}`; label = 'Scrivi email' + (to ? ' a ' + to : ''); break;
+      default: return { error:'Canale non supportato' };
+    }
+    addActions([{ label, url }]);
+    return { ok:true, nota:"È comparso un pulsante: l'utente lo tocca per confermare e inviare" };
+  },
+  add_calendar_event({ title, start, end, location = '', details = '' }){
+    const s = new Date(start); if (isNaN(s)) return { error:'Data di inizio non valida' };
+    const e = end && !isNaN(new Date(end)) ? new Date(end) : new Date(s.getTime() + 3600000);
+    const p = n => String(n).padStart(2, '0');
+    const loc = d => d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + 'T' + p(d.getHours()) + p(d.getMinutes()) + '00';
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const g = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${enc(title)}&dates=${loc(s)}/${loc(e)}&ctz=${enc(tz)}&details=${enc(details)}&location=${enc(location)}`;
+    const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Assistente//IT','BEGIN:VEVENT','UID:' + uid() + '@assistente','DTSTAMP:' + icsUtc(new Date()),'DTSTART:' + icsUtc(s),'DTEND:' + icsUtc(e),'SUMMARY:' + icsEsc(title),'DESCRIPTION:' + icsEsc(details),'LOCATION:' + icsEsc(location),'END:VEVENT','END:VCALENDAR'].join('\r\n');
+    addActions([{ label:'Aggiungi a Google Calendar', url:g }, { label:'Scarica .ics', url:URL.createObjectURL(new Blob([ics], { type:'text/calendar' })), download:'evento.ics' }]);
+    return { ok:true, nota:"Sono comparsi i pulsanti per aggiungere l'evento" };
+  },
+  async look({ camera = 'back' }){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return { error:'Fotocamera non disponibile' };
+    const stream = await openCamera(camera), ov = cameraOverlay(stream);
+    try{
+      await ov.v.play(); await sleep(1600);
+      const url = grab(ov.v, ov.v.videoWidth, ov.v.videoHeight, 1024); addImage(url);
+      return { __image:url.split(',')[1] };
+    } finally { stream.getTracks().forEach(t => t.stop()); ov.close(); }
+  },
+  look_screen({ question = '' }){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return { error:'Condivisione schermo disponibile solo su PC' };
+    addActions([{ label:'Condividi schermo', fn:() => shareScreen(question) }]);
+    return { ok:true, nota:"È comparso il pulsante Condividi schermo: l'utente deve toccarlo, il browser lo richiede" };
+  },
+  async scan_code(){
+    if (!('BarcodeDetector' in window)) return { error:'Scanner non supportato da questo browser (funziona su Chrome Android). In alternativa usa look e leggo io il codice.' };
+    const det = new BarcodeDetector(), stream = await openCamera('back'), ov = cameraOverlay(stream);
+    try{
+      await ov.v.play();
+      const until = Date.now() + 12000;
+      while (Date.now() < until){
+        const codes = await det.detect(ov.v).catch(() => []);
+        if (codes.length){ chime(); const v = codes.map(c => ({ formato:c.format, contenuto:c.rawValue })); if (/^https?:\/\//.test(codes[0].rawValue)) addActions([{ label:'Apri link del codice', url:codes[0].rawValue }]); return { codici:v }; }
+        await sleep(250);
+      }
+      return { error:'Nessun codice trovato in 12 secondi' };
+    } finally { stream.getTracks().forEach(t => t.stop()); ov.close(); }
+  },
+  async flashlight({ on }){
+    if (!on){ if (torchStream){ torchStream.getTracks().forEach(t => t.stop()); torchStream = null; } return { stato:'spenta' }; }
+    if (torchStream) return { stato:'già accesa' };
+    const s = await openCamera('back'), tr = s.getVideoTracks()[0], caps = tr.getCapabilities ? tr.getCapabilities() : {};
+    if (!caps.torch){ s.getTracks().forEach(t => t.stop()); return { error:'Torcia non controllabile da questo dispositivo o browser' }; }
+    await tr.applyConstraints({ advanced:[{ torch:true }] }); torchStream = s; return { stato:'accesa' };
+  },
+  async say({ text, lang }){ await speak(text, { lang, force:true }); return { ok:true }; },
+  async device_status({ include_location }){
+    const s = { online:navigator.onLine, piattaforma:isAndroid ? 'Android' : ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform), ora_locale:new Date().toLocaleString('it-IT') };
+    try{ if (navigator.getBattery){ const b = await navigator.getBattery(); s.batteria_percento = Math.round(b.level * 100); s.in_carica = b.charging; } }catch(e){}
+    if (navigator.connection) s.rete = navigator.connection.effectiveType;
+    if (include_location){ try{ s.posizione = await getPosition(); }catch(e){ s.posizione = e.message; } }
+    return s;
+  },
+  async copy_to_clipboard({ text }){
+    try{ await navigator.clipboard.writeText(text); return { ok:true }; }
+    catch(e){ addActions([{ label:'Copia testo', fn:() => navigator.clipboard.writeText(text).then(() => toast('Copiato')) }]); return { ok:false, nota:'È comparso un pulsante Copia' }; }
+  },
+  random({ kind, min = 1, max = 100, sides = 6, length = 16, options = [] }){
+    const r = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    if (kind === 'coin') return { risultato:Math.random() < 0.5 ? 'testa' : 'croce' };
+    if (kind === 'dice') return { risultato:r(1, sides) };
+    if (kind === 'pick') return options.length ? { risultato:options[r(0, options.length - 1)] } : { error:'Nessuna opzione' };
+    if (kind === 'password'){
+      const cs = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?-_', a = new Uint32Array(Math.min(Math.max(length, 8), 64));
+      crypto.getRandomValues(a); const pw = Array.from(a, x => cs[x % cs.length]).join('');
+      addActions([{ label:'Copia password', fn:() => navigator.clipboard.writeText(pw).then(() => toast('Password copiata')) }]);
+      return { password:pw, nota:"Non leggerla ad alta voce: di' solo che è pronta e che c'è il pulsante per copiarla" };
+    }
+    return { risultato:r(min, max) };
+  },
+  set_voice({ enabled, rate }){
+    if (enabled !== undefined) settings.speak = !!enabled;
+    if (rate) settings.rate = Math.min(1.5, Math.max(0.7, +rate));
+    saveSettings(); return { voce:settings.speak ? 'attiva' : 'disattivata', velocita:settings.rate };
+  },
+  stopwatch({ action = 'status' }){
+    let sw = store.get('stopwatch', { start:0, laps:[] });
+    const el = () => sw.start ? Date.now() - sw.start : 0;
+    const fmt = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)} minuti e ${s % 60} secondi`; };
+    if (action === 'start'){ if (!sw.start) sw = { start:Date.now(), laps:[] }; }
+    else if (action === 'lap'){ if (!sw.start) return { error:'Cronometro fermo' }; sw.laps.push(el()); }
+    else if (action === 'stop'){ if (!sw.start) return { error:'Cronometro fermo' }; const t = el(); store.set('stopwatch', { start:0, laps:[] }); return { fermato:true, tempo:fmt(t), giri:sw.laps.map(fmt) }; }
+    else if (action === 'reset') sw = { start:0, laps:[] };
+    store.set('stopwatch', sw);
+    return { attivo:!!sw.start, tempo:fmt(el()), giri:sw.laps.map(fmt) };
+  },
+  ambient({ sound = 'rain', minutes = 30 }){
+    if (sound === 'off'){ stopAmbient(); return { stato:'spento' }; }
+    startAmbient(sound, minutes); return { stato:'acceso', suono:sound, minuti:Math.min(Math.max(minutes || 30, 1), 480) };
+  },
+  async where_am_i(){
+    const p = await getPosition();
+    const d = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${p.lat}&lon=${p.lon}&accept-language=it`)).json();
+    const a = d.address || {};
+    addActions([{ label:'Apri in Google Maps', url:`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}` }]);
+    return { indirizzo:d.display_name, via:[a.road, a.house_number].filter(Boolean).join(' '), citta:a.city || a.town || a.village || a.municipality, provincia:a.county, precisione_m:p.precisione_m };
+  },
+  async find_nearby({ query, radius_km = 2 }){
+    const p = await getPosition(), dk = radius_km / 111, dl = dk / Math.cos(p.lat * Math.PI / 180);
+    const list = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${enc(query)}&limit=6&accept-language=it&bounded=1&viewbox=${p.lon - dl},${p.lat + dk},${p.lon + dl},${p.lat - dk}`)).json();
+    if (!list.length) return { error:'Niente trovato entro ' + radius_km + ' km: allarga il raggio oppure usa open_link con maps' };
+    const dist = (la, lo) => { const R = 6371, dLa = (la - p.lat) * Math.PI / 180, dLo = (lo - p.lon) * Math.PI / 180; const h = Math.sin(dLa / 2) ** 2 + Math.cos(p.lat * Math.PI / 180) * Math.cos(la * Math.PI / 180) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+    const out = list.map(x => ({ nome:x.name || x.display_name.split(',')[0], tipo:x.type, distanza_km:+dist(+x.lat, +x.lon).toFixed(2), indirizzo:x.display_name.split(',').slice(0, 3).join(',') })).sort((a, b) => a.distanza_km - b.distanza_km);
+    addActions(out.slice(0, 3).map(x => ({ label:'Vai a ' + x.nome, url:`https://www.google.com/maps/dir/?api=1&destination=${enc(x.nome + ', ' + x.indirizzo)}` })));
+    return { luoghi:out };
+  },
+  pick_contact({ purpose = '' }){
+    if (!(navigator.contacts && navigator.contacts.select)) return { error:"Selezione contatti disponibile solo su Android con Chrome: chiedi il numero a voce" };
+    addActions([{ label:'Scegli contatto', fn:async () => {
+      try{
+        const [c] = await navigator.contacts.select(['name', 'tel'], { multiple:false }); if (!c) return;
+        handleUser(`Contatto scelto: ${(c.name || []).join(' ')}, numero ${(c.tel || []).join(' oppure ')}. ${purpose}`.trim());
+      }catch(e){ toast('Selezione annullata'); }
+    } }]);
+    return { ok:true, nota:"È comparso il pulsante Scegli contatto: l'utente lo tocca e riceverai nome e numero nel prossimo messaggio" };
+  },
+  share({ title = '', text = '', url = '' }){
+    const all = [title, text, url].filter(Boolean).join('\n');
+    if (!navigator.share){ addActions([{ label:'Copia testo', fn:() => navigator.clipboard.writeText(all).then(() => toast('Copiato')) }]); return { ok:false, nota:'Condivisione non disponibile su questo browser: mostrato il pulsante Copia' }; }
+    addActions([{ label:'Condividi', fn:() => navigator.share(Object.assign({ title, text }, url ? { url } : {})).catch(() => {}) }]);
+    return { ok:true, nota:'È comparso il pulsante Condividi da toccare' };
+  },
+  dictate({ title = '' }){
+    if (!SR) return { error:'Dettatura non disponibile: serve Chrome o Edge' };
+    pendingDictation = { title };
+    return { ok:true, nota:"La dettatura parte appena hai finito di rispondere: di' all'utente che può iniziare a parlare e chiudere con \"fine dettatura\". Rispondi in una frase." };
+  },
+  keep_screen_on({ on }){ keepAwake(!!on); return { schermo:on ? 'resta acceso' : 'comportamento normale' }; },
+  async home_states({ search = '' }){
+    const q = search.toLowerCase(), all = await haFetch('/api/states');
+    const list = all.filter(s => !q || s.entity_id.toLowerCase().includes(q) || String(s.attributes.friendly_name || '').toLowerCase().includes(q)).slice(0, 60);
+    return { entita:list.map(s => ({ id:s.entity_id, nome:s.attributes.friendly_name, stato:s.state, unita:s.attributes.unit_of_measurement })) };
+  },
+  async home_control({ domain, service, entity_id, data = {} }){
+    const res = await haFetch(`/api/services/${enc(domain)}/${enc(service)}`, { method:'POST', body:JSON.stringify(Object.assign({}, entity_id ? { entity_id } : {}, data)) });
+    return { ok:true, entita_aggiornate:Array.isArray(res) ? res.map(s => s.entity_id + ': ' + s.state) : [] };
+  },
+  async call_webhook({ name, payload = {} }){
+    const h = hooks().find(x => x.name === name); if (!h) return { error:'Webhook non trovato' };
+    const r = await fetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload) });
+    return { stato_http:r.status, risposta:(await r.text()).slice(0, 1500) };
+  }
+};
+async function runTool(name, input){ if (!IMPL[name]) return { error:'Strumento sconosciuto' }; return await IMPL[name](input || {}); }
+function toolResult(id, out){
+  if (out && out.__image) return { type:'tool_result', tool_use_id:id, content:[{ type:'image', source:{ type:'base64', media_type:'image/jpeg', data:out.__image } }, { type:'text', text:'Foto appena scattata.' }] };
+  return { type:'tool_result', tool_use_id:id, content:typeof out === 'string' ? out : JSON.stringify(out), is_error:!!(out && out.error) };
+}
+
+/* ================= Claude ================= */
+function systemPrompt(){
+  const open = todos.filter(t => !t.done).map(t => t.text);
+  const f = settings.gender === 'f', g = (fem, mas) => f ? fem : mas;
+  const PERSONE = {
+    classica:`${g("un'assistente", 'un assistente')} personale a comando vocale: ${g('competente, rapida, elegante', 'competente, rapido, elegante')}, con un umorismo asciutto e garbato, ${g('leale ma franca', 'leale ma franco')} quando serve`,
+    amichevole:`${g("un'assistente", 'un assistente')} personale a comando vocale: ${g('calorosa, informale, entusiasta', 'caloroso, informale, entusiasta')}, parli come ${g("un'amica", 'un amico')} in gamba, con qualche battuta`,
+    essenziale:`${g("un'assistente", 'un assistente')} personale a comando vocale ${g('essenziale', 'essenziale')}: risposte cortissime, niente convenevoli, solo l'informazione o la conferma`,
+    sarcastica:`${g("un'assistente", 'un assistente')} personale a comando vocale ${g('brillante e sarcastica', 'brillante e sarcastico')}: ${g('spiritosa e pungente', 'spiritoso e pungente')}, ma mai ${g('scortese', 'scortese')} e sempre ${g('utile', 'utile')}`
+  };
+  const persona = settings.persona === 'custom' && settings.personaCustom ? settings.personaCustom : (PERSONE[settings.persona] || PERSONE.classica);
+  return `Sei ${settings.name}, ${persona}. Ti riferisci a te ${g('al femminile', 'al maschile')}.
+Parli in ${LANGS[settings.lang] || 'italiano'}${settings.userName ? ` e ti rivolgi all'utente chiamandolo ${settings.userName}` : ''}.
+Le risposte vengono lette ad alta voce: di norma una-tre frasi, niente markdown, elenchi o emoji, niente URL letti per intero, numeri e unità scritti in modo naturale da pronunciare. Per contenuti lunghi (riassunti di documenti, analisi) puoi essere più esteso ma sempre in prosa scorrevole.
+Usa gli strumenti invece di inventare: ricerca web per notizie, risultati, prezzi e fatti recenti; calculate per i conti; get_weather per il meteo. Puoi usare più strumenti in sequenza. Dopo un'azione conferma in breve cosa hai fatto.
+Quando compare un pulsante da toccare (messaggi, chiamate, link bloccati, calendario, condivisione schermo), dillo all'utente.
+Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remember. Se servono un numero o un contatto che non conosci, chiedilo.
+Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
+Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
+Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}
+Routine disponibili:
+${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
+Cosa sai dell'utente:
+${memory.length ? memory.map(m => '- ' + m.fact).join('\n') : '(ancora niente)'}
+Note salvate: ${notes.length} (cercale con manage_notes). Cose da fare aperte: ${open.length ? open.join('; ') : 'nessuna'}.`;
+}
+function apiHeaders(){
+  const h = { 'content-type':'application/json', 'x-api-key':settings.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' };
+  if (settings.fetch) h['anthropic-beta'] = 'web-fetch-2025-09-10';
+  return h;
+}
+async function callClaude(messages, cb = {}){
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:apiHeaders(),
+    body:JSON.stringify({ model:settings.model, max_tokens:2000, system:systemPrompt(), tools:getTools(), messages, stream:true })
+  });
+  if (!r.ok){
+    const data = await r.json().catch(() => ({})), msg = (data.error && data.error.message) || 'HTTP ' + r.status;
+    if (settings.fetch && /web_fetch|beta/i.test(msg)){ settings.fetch = false; saveSettings(); toast('Lettura pagine web non disponibile per questo account: disattivata'); return callClaude(messages, cb); }
+    throw new Error(msg);
+  }
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = '', stop = null; const blocks = [];
+  const handle = ev => {
+    switch (ev.type){
+      case 'content_block_start': {
+        const b = Object.assign({}, ev.content_block);
+        if (b.type === 'text') b.text = b.text || '';
+        if (b.type === 'tool_use' || b.type === 'server_tool_use') b._json = '';
+        blocks[ev.index] = b; if (cb.onBlockStart) cb.onBlockStart(b); break;
+      }
+      case 'content_block_delta': {
+        const b = blocks[ev.index], d = ev.delta; if (!b) break;
+        if (d.type === 'text_delta'){ b.text += d.text; if (cb.onText) cb.onText(d.text); }
+        else if (d.type === 'input_json_delta') b._json += d.partial_json;
+        else if (d.type === 'citations_delta') (b.citations = b.citations || []).push(d.citation);
+        break;
+      }
+      case 'content_block_stop': {
+        const b = blocks[ev.index];
+        if (b && '_json' in b){ try{ b.input = b._json ? JSON.parse(b._json) : (b.input || {}); }catch(e){ b.input = {}; } delete b._json; }
+        break;
+      }
+      case 'message_delta': if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; break;
+      case 'error': throw new Error((ev.error && ev.error.message) || 'Errore durante la risposta');
+    }
+  };
+  for (;;){
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream:true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0){
+      const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+      const line = chunk.split('\n').find(l => l.startsWith('data:')); if (!line) continue;
+      let ev; try{ ev = JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
+      handle(ev);
+    }
+  }
+  return { content:blocks.filter(Boolean), stop_reason:stop };
+}
+async function runAgent(turn, speaker){
+  let final = '';
+  for (let step = 0; step < 12; step++){
+    let bubble = null, acc = '';
+    const data = await callClaude([...history.flat(), ...turn], {
+      onText:t => { if (!bubble) bubble = addMsg('bot', ''); acc += t; bubble.textContent = cleanText(acc); scrollLog(); speaker.push(t); NN.pulse(); },
+      onBlockStart:b => { if (b.type === 'server_tool_use'){ NN.burst(4); NN.label(TOOL_LABEL[b.name] || b.name); } }
+    });
+    turn.push({ role:'assistant', content:data.content });
+    for (const b of data.content) if (b.type === 'server_tool_use') addMsg('tool', '› ' + (TOOL_LABEL[b.name] || b.name) + ': ' + ((b.input && (b.input.query || b.input.url)) || ''));
+    if (data.stop_reason === 'tool_use'){
+      if (bubble) bubble.classList.add('dim');
+      speaker.flush();
+      const results = [];
+      for (const b of data.content){
+        if (b.type !== 'tool_use') continue;
+        const lbl = TOOL_LABEL[b.name] || b.name;
+        addMsg('tool', '› ' + lbl); NN.burst(6); NN.label(lbl);
+        let out; try{ out = await runTool(b.name, b.input); }catch(e){ out = { error:e.message }; }
+        results.push(toolResult(b.id, out));
+      }
+      turn.push({ role:'user', content:results });
+      continue;
+    }
+    if (data.stop_reason === 'pause_turn') continue;
+    final = acc; break;
+  }
+  speaker.flush();
+  return final;
+}
+function logT(k, t){ transcript.push({ k, t }); if (transcript.length > 80) transcript = transcript.slice(-80); store.set('transcript', transcript); }
+function persistHistory(){ store.set('history', history.map(t => t.map(m => ({ role:m.role, content:stripHeavy(m.content) })))); }
+function stripHeavy(c){
+  if (!Array.isArray(c)) return c;
+  return c.map(b => (b.type === 'image' || b.type === 'document') ? { type:'text', text:'[allegato non più disponibile]' }
+    : (b.type === 'tool_result' && Array.isArray(b.content)) ? Object.assign({}, b, { content:stripHeavy(b.content) }) : b);
+}
+function trimHistory(){
+  while (history.length > 8) history.shift();
+  for (const turn of history.slice(0, -1)) for (const m of turn) m.content = stripHeavy(m.content);
+}
+async function handleUser(text, atts = [], opts = {}){
+  if (busy) return;
+  if (!settings.apiKey){ openSettings(); toast('Inserisci la tua API key Anthropic'); return; }
+  busy = true; stopRec(); stopSpeaking(); tts.mutedTurn = false; renderPending();
+  text = text || 'Analizza gli allegati.';
+  addMsg('user', text); logT('user', text + (atts.length ? ' (📎 ' + atts.map(a => a.name).join(', ') + ')' : ''));
+  atts.forEach(a => a.kind === 'image' ? addImage(a.preview, true) : addMsg('user', '📎 ' + a.name));
+  setState('thinking'); NN.burst(8);
+  const turn = [{ role:'user', content:atts.length ? [...attachmentBlocks(atts), { type:'text', text }] : text }];
+  const speaker = makeStreamSpeaker();
+  let reply = '';
+  try{
+    reply = await runAgent(turn, speaker);
+    history.push(turn); trimHistory(); persistHistory();
+    if (reply) logT('bot', cleanText(reply));
+    await ttsWait();
+  }catch(e){
+    console.error(e); addMsg('err', 'Errore: ' + e.message); logT('err', 'Errore: ' + e.message);
+  }finally{
+    busy = false;
+    if (!tts.speaking) setState('idle');
+    if (pendingDictation) setTimeout(() => { if (!busy) startDictation(pendingDictation); }, 300);
+    else if (opts.voice && settings.followUp && reply && !tts.mutedTurn && SR) setTimeout(() => { if (!busy && !rec) listenCommand(); }, 250);
+    else resumeWake();
+  }
+}
+
+/* ================= Promemoria ================= */
+let lastFired = null;
+function fireReminder(r){
+  lastFired = r;
+  const late = Date.now() - r.when > 120000;
+  if (r.routine){
+    const rt = routines.find(x => x.name.toLowerCase() === String(r.routine).toLowerCase());
+    if (rt && !busy && !late){ chime(2); NN.burst(10); addMsg('tool', '› routine automatica: ' + rt.name); handleUser(rt.instructions); return; }
+  }
+  const text = (r.kind === 'timer' ? 'Timer scaduto: ' : 'Promemoria: ') + r.text + (late ? " (in ritardo, l'app era chiusa)" : '');
+  addMsg('bot alert', '⏰ ' + text); logT('bot alert', '⏰ ' + text); chime(3); notify(text); NN.burst(10);
+  if (!busy) speak(text);
+}
+setInterval(() => {
+  const now = Date.now(), due = reminders.filter(r => r.when <= now);
+  if (due.length){
+    reminders = reminders.filter(r => r.when > now);
+    due.forEach(r => { if (r.repeat && r.repeat !== 'none') reminders.push(Object.assign({}, r, { when:nextOcc(r.when, r.repeat) })); });
+    saveRem(); due.forEach(fireReminder);
+  } else if ($('#dlgData').open) renderRem();
+}, 1000);
+
+/* ================= Pannello dati ================= */
+function li(text, onDel, extra, sub){
+  const el = document.createElement('li'); if (extra) extra(el);
+  const s = document.createElement('span'); s.textContent = text;
+  if (sub){ s.appendChild(document.createElement('br')); const sm = document.createElement('small'); sm.textContent = sub; s.appendChild(sm); }
+  el.appendChild(s);
+  const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.setAttribute('aria-label', 'Elimina'); x.onclick = onDel; el.appendChild(x);
+  return el;
+}
+function emptyLi(ul, t){ const e = document.createElement('li'); e.className = 'empty'; e.textContent = t; ul.appendChild(e); }
+const REP = { daily:'ogni giorno', weekdays:'nei feriali', weekly:'ogni settimana' };
+function renderRem(){
+  const ul = $('#lRem'); ul.innerHTML = '';
+  if (!reminders.length) return emptyLi(ul, 'Nessun promemoria. Prova: "ricordami alle 18 di chiamare Marco".');
+  [...reminders].sort((a, b) => a.when - b.when).forEach(r => {
+    const left = Math.max(0, r.when - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left / 1000) % 60;
+    const when = left < 3600000 ? `tra ${m}:${String(s).padStart(2, '0')}` : fmtWhen(r.when);
+    ul.appendChild(li(r.text, () => { reminders = reminders.filter(x => x !== r); saveRem(); }, null, when + (REP[r.repeat] ? ', ' + REP[r.repeat] : '')));
+  });
+}
+function renderData(){
+  renderRem();
+  const ut = $('#lTodo'); ut.innerHTML = '';
+  if (!todos.length) emptyLi(ut, 'Lista vuota.');
+  todos.forEach(t => ut.appendChild(li(t.text, () => { todos = todos.filter(x => x !== t); saveTodos(); }, el => {
+    if (t.done) el.classList.add('done');
+    const c = document.createElement('input'); c.type = 'checkbox'; c.checked = t.done; c.setAttribute('aria-label', 'Fatto');
+    c.onchange = () => { t.done = c.checked; saveTodos(); }; el.appendChild(c);
+  })));
+  const un = $('#lNotes'); un.innerHTML = '';
+  if (!notes.length) emptyLi(un, 'Nessuna nota. Prova: "prendi nota: idee per il viaggio…".');
+  notes.forEach(n => un.appendChild(li(n.title, () => { notes = notes.filter(x => x !== n); saveNotes(); }, null, n.text.slice(0, 120))));
+  const ur = $('#lRoutines'); ur.innerHTML = '';
+  if (!routines.length) emptyLi(ur, 'Nessuna routine. Prova: "crea la routine palestra: …".');
+  routines.forEach(r => ur.appendChild(li(r.name, () => { routines = routines.filter(x => x !== r); saveRoutines(); }, null, r.instructions)));
+  const um = $('#lMem'); um.innerHTML = '';
+  if (!memory.length) emptyLi(um, 'Ancora niente. Prova: "ricorda che il numero di Marco è +39…".');
+  memory.forEach(m => um.appendChild(li(m.fact, () => { memory = memory.filter(x => x !== m); saveMem(); })));
+}
+function refreshData(){ if ($('#dlgData').open) renderData(); }
+$('#dExport').onclick = () => {
+  const { apiKey, haToken, ghToken, elKey, gistId, ...safe } = settings;
+  const data = { app:'assistente', version:2, esportato:new Date().toISOString(), settings:safe, todos, reminders, memory, notes, routines };
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type:'application/json' }));
+  a.download = 'backup-' + settings.name.toLowerCase() + '.json'; a.click();
+};
+$('#dExportChat').onclick = () => {
+  const txt = transcript.map(e => (e.k.startsWith('user') ? 'Io: ' : e.k.startsWith('bot') ? settings.name + ': ' : '') + e.t).join('\n\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt || '(vuota)'], { type:'text/plain' })); a.download = 'conversazione-' + new Date().toISOString().slice(0, 10) + '.txt'; a.click();
+};
+$('#dImport').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if (!confirm('Sostituire promemoria, liste, note, routine e memoria con quelli del backup?')) return;
+    todos = d.todos || []; reminders = d.reminders || []; memory = d.memory || []; notes = d.notes || []; routines = d.routines || [];
+    if (d.settings){ const { apiKey, haToken, ghToken, elKey, gistId } = settings; settings = Object.assign({}, DEFAULTS, d.settings, { apiKey, haToken, ghToken, elKey, gistId }); saveSettings(); applySettings(); }
+    saveTodos(); saveRem(); saveMem(); saveNotes(); saveRoutines(); toast('Backup importato');
+  }catch(err){ toast('File di backup non valido'); }
+};
+
+/* ================= Sincronizzazione (Gist GitHub privato) ================= */
+const SYNC_FILE = 'evelyn-data.json', COLS = ['todos','reminders','memory','notes','routines'];
+let syncT = null, syncing = false, syncMsg = 'Sincronizzazione non attiva: aggiungi un token GitHub nelle impostazioni.';
+function setSyncStatus(t){ syncMsg = t; const el = $('#syncStatus'); if (el) el.textContent = t; }
+function scheduleSync(){ if (!settings.ghToken) return; clearTimeout(syncT); syncT = setTimeout(syncNow, 2500); }
+async function gh(path, opts = {}){
+  const r = await fetch('https://api.github.com' + path, Object.assign({}, opts, { headers:{ Authorization:'Bearer ' + settings.ghToken, Accept:'application/vnd.github+json', 'content-type':'application/json' } }));
+  if (r.status === 401) throw new Error('token GitHub non valido');
+  if (!r.ok) throw new Error('GitHub ha risposto ' + r.status);
+  return r.json();
+}
+const snapshot = () => JSON.stringify({ version:3, updated:meta.updated, todos, reminders, memory, notes, routines });
+function getCol(k){ return { todos, reminders, memory, notes, routines }[k]; }
+function setCol(k, v){ if (k === 'todos') todos = v; else if (k === 'reminders') reminders = v; else if (k === 'memory') memory = v; else if (k === 'notes') notes = v; else if (k === 'routines') routines = v; store.set(k, v); }
+async function findGist(){
+  if (settings.gistId) return settings.gistId;
+  const list = await gh('/gists?per_page=100');
+  const g = list.find(x => x.files && x.files[SYNC_FILE]);
+  settings.gistId = g ? g.id : (await gh('/gists', { method:'POST', body:JSON.stringify({ description:'Dati sincronizzati assistente', public:false, files:{ [SYNC_FILE]:{ content:snapshot() } } }) })).id;
+  saveSettings(); return settings.gistId;
+}
+function applyRemote(d){
+  const ru = d.updated || {}; let push = false;
+  if (!meta.synced){
+    for (const k of COLS){
+      const seen = new Set(), merged = [];
+      for (const it of [...(d[k] || []), ...getCol(k)]){ const key = it.id || JSON.stringify(it); if (!seen.has(key)){ seen.add(key); merged.push(it); } }
+      setCol(k, merged); meta.updated[k] = Date.now();
+    }
+    meta.synced = true; push = true;
+  } else {
+    for (const k of COLS){
+      const rt = ru[k] || 0, lt = meta.updated[k] || 0;
+      if (rt > lt && Array.isArray(d[k])){ setCol(k, d[k]); meta.updated[k] = rt; }
+      else if (lt > rt) push = true;
+    }
+  }
+  store.set('meta', meta); refreshData(); return push;
+}
+async function syncNow(){
+  if (!settings.ghToken || syncing) return;
+  syncing = true; setSyncStatus('Sincronizzazione in corso…');
+  try{
+    const id = await findGist(), g = await gh('/gists/' + id), f = g.files[SYNC_FILE];
+    let remote = null;
+    if (f){ const txt = f.truncated ? await (await fetch(f.raw_url)).text() : f.content; try{ remote = JSON.parse(txt); }catch(e){} }
+    const push = remote ? applyRemote(remote) : true;
+    if (push) await gh('/gists/' + id, { method:'PATCH', body:JSON.stringify({ files:{ [SYNC_FILE]:{ content:snapshot() } } }) });
+    setSyncStatus('Sincronizzato alle ' + new Date().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) + '.');
+  }catch(e){
+    if (/404/.test(e.message)){ settings.gistId = ''; saveSettings(); }
+    setSyncStatus('Sincronizzazione non riuscita: ' + e.message + '.');
+  }finally{ syncing = false; }
+}
+$('#dSync').onclick = () => { if (!settings.ghToken){ toast('Aggiungi prima il token GitHub nelle impostazioni'); return; } syncNow(); };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60000);
+
+/* ================= Controllo sistema ================= */
+async function apiPing(web){
+  const body = { model:settings.model, max_tokens:16, messages:[{ role:'user', content:'Rispondi solo: ok' }] };
+  if (web) body.tools = [{ type:'web_search_20250305', name:'web_search', max_uses:1 }];
+  const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST',
+    headers:{ 'content-type':'application/json', 'x-api-key':settings.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' }, body:JSON.stringify(body) });
+  if (r.ok) return;
+  const d = await r.json().catch(() => ({})), m = (d.error && d.error.message) || 'HTTP ' + r.status;
+  if (r.status === 401) throw new Error('chiave non valida, ricopiala dalla Console Anthropic');
+  if (/credit balance/i.test(m)) throw new Error('credito esaurito o assente, ricarica in Billing nella Console');
+  if (r.status === 404 || /model/i.test(m)) throw new Error('modello non disponibile, scegline un altro nelle impostazioni (' + m + ')');
+  if (web) throw new Error('non abilitata per il tuo account: attivala nella Console o spegni "Ricerca web" (' + m + ')');
+  throw new Error(m);
+}
+async function runDiagnostics(){
+  const ul = $('#lDiag'); ul.innerHTML = '';
+  const check = async (name, fn) => {
+    const li = document.createElement('li'), sp = document.createElement('span');
+    sp.textContent = '… ' + name; li.appendChild(sp); ul.appendChild(li);
+    let st, msg;
+    try{ [st, msg] = await fn(); }catch(e){ st = 'bad'; msg = e.message; }
+    sp.className = 'd-' + st; sp.textContent = (st === 'ok' ? '✓ ' : st === 'warn' ? '! ' : '✗ ') + name + (msg ? ': ' + msg : '');
+  };
+  const standalone = matchMedia('(display-mode: standalone)').matches;
+  await check('Connessione sicura', async () => window.isSecureContext ? ['ok', 'attiva'] : ['bad', "apri l'app dal suo indirizzo https://…github.io"]);
+  await check('Browser', async () => SR ? ['ok', 'riconoscimento vocale supportato'] : ['bad', 'per parlare usa Chrome su Android, Chrome o Edge su PC']);
+  await check('Microfono', async () => {
+    try{ const s = await navigator.mediaDevices.getUserMedia({ audio:true }); s.getTracks().forEach(t => t.stop()); return ['ok', 'permesso concesso']; }
+    catch(e){ return ['bad', e.name === 'NotAllowedError' ? "permesso negato: tocca il lucchetto accanto all'indirizzo e consenti il microfono" : 'nessun microfono trovato (' + e.message + ')']; }
+  });
+  await check('Voce del dispositivo', async () => {
+    loadVoices(); const it = voices.filter(v => v.lang.toLowerCase().startsWith(settings.lang.slice(0, 2).toLowerCase()));
+    return it.length ? ['ok', it.length + ' voci disponibili nella lingua scelta'] : voices.length ? ['warn', 'nessuna voce nella lingua scelta: installala nelle impostazioni di sintesi vocale del sistema'] : ['warn', 'voci non ancora caricate, ripeti il controllo tra qualche secondo'];
+  });
+  await check('Notifiche', async () => {
+    if (!('Notification' in window)) return ['warn', 'non supportate da questo browser'];
+    let p = Notification.permission; if (p === 'default') p = await Notification.requestPermission();
+    return p === 'granted' ? ['ok', 'attive'] : ['warn', 'bloccate: attivale dalle impostazioni del sito per vedere i promemoria'];
+  });
+  await check('Posizione', async () => { try{ const p = await getPosition(); return ['ok', 'precisione circa ' + p.precisione_m + ' metri']; }catch(e){ return ['warn', 'non concessa: serve solo per meteo e navigazione senza indicare la città']; } });
+  await check('Installazione', async () => standalone ? ['ok', 'app installata'] : swReg ? ['warn', "non ancora installata: usa \"Installa app\" dal menu del browser"] : ['warn', 'installazione non disponibile da questo indirizzo']);
+  await check('Chiave Anthropic', async () => { if (!settings.apiKey) return ['bad', 'manca: incollala nelle impostazioni']; await apiPing(false); return ['ok', 'funziona con ' + settings.model]; });
+  if (settings.apiKey && settings.web) await check('Ricerca web', async () => { await apiPing(true); return ['ok', 'abilitata']; });
+  if (settings.tts === 'eleven') await check('Voce ElevenLabs', async () => {
+    if (!settings.elKey) return ['bad', 'manca la chiave ElevenLabs'];
+    const url = await elFetch({ text:'Pronto.', lang:settings.lang }); URL.revokeObjectURL(url); return ['ok', 'funziona'];
+  });
+  await check('Sincronizzazione', async () => { if (!settings.ghToken) return ['warn', 'non attiva: aggiungi il token GitHub per allineare PC e telefono']; await gh('/gists?per_page=1'); return ['ok', 'token valido']; });
+  if (haOn()) await check('Home Assistant', async () => {
+    try{ await haFetch('/api/'); return ['ok', 'collegato']; }
+    catch(e){ return ['bad', e instanceof TypeError ? 'non raggiungibile: serve HTTPS e il tuo indirizzo GitHub in cors_allowed_origins' : e.message]; }
+  });
+  if (hooks().length) await check('Webhook', async () => ['ok', hooks().map(h => h.name).join(', ')]);
+}
+function openDiag(){ $('#dlgDiag').showModal(); runDiagnostics(); }
+$('#diagRun').onclick = runDiagnostics;
+$('#diagClose').onclick = () => $('#dlgDiag').close();
+$('#sDiag').onclick = () => { $('#dlgSettings').close('ok'); openDiag(); };
+
+/* ================= Impostazioni ================= */
+function applyAccent(){
+  const c = ACCENTS[settings.accent] || ACCENTS.cyan;
+  document.documentElement.style.setProperty('--cyan', `rgb(${c.join(',')})`); NN.setAccent(c);
+}
+function applySettings(){
+  $('#brandName').textContent = settings.name; document.title = settings.name; applyAccent(); loadVoices();
+  keepAwake(settings.wake);
+  if (settings.wake) resumeWake(); else { if (recMode === 'wake') stopRec(); if (!busy) setState('idle'); }
+}
+function openSettings(){
+  $('#sKey').value = settings.apiKey; $('#sModel').value = settings.model; $('#sName').value = settings.name; $('#sUser').value = settings.userName;
+  $('#sRate').value = settings.rate; $('#sRateVal').textContent = settings.rate + '×';
+  $('#sSpeak').checked = settings.speak; $('#sWake').checked = settings.wake; $('#sWeb').checked = settings.web;
+  $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
+  $('#sFollow').checked = settings.followUp; $('#sEngine').value = settings.tts; $('#sElKey').value = settings.elKey; $('#sElVoice').value = settings.elVoice; $('#sElModel').value = settings.elModel; $('#sGh').value = settings.ghToken;
+  $('#sHaUrl').value = settings.haUrl; $('#sHaToken').value = settings.haToken; $('#sHooks').value = settings.hooks;
+  loadVoices(); $('#dlgSettings').showModal();
+}
+$('#sRate').oninput = e => $('#sRateVal').textContent = e.target.value + '×';
+$('#dlgSettings').addEventListener('close', () => {
+  if ($('#dlgSettings').returnValue !== 'ok') return;
+  Object.assign(settings, {
+    apiKey:$('#sKey').value.trim(), model:$('#sModel').value, name:$('#sName').value.trim() || 'Evelyn', userName:$('#sUser').value.trim(),
+    voiceURI:$('#sVoice').value, rate:parseFloat($('#sRate').value), speak:$('#sSpeak').checked, wake:$('#sWake').checked, web:$('#sWeb').checked,
+    haUrl:$('#sHaUrl').value.trim(), haToken:$('#sHaToken').value.trim(), hooks:$('#sHooks').value
+  });
+  const newGh = $('#sGh').value.trim();
+  if (newGh !== settings.ghToken){ settings.ghToken = newGh; settings.gistId = ''; meta.synced = false; store.set('meta', meta); }
+  const newLang = $('#sLang').value; if (newLang !== settings.lang) settings.voiceURI = '';
+  Object.assign(settings, { persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
+  tts.elDisabled = false; tts.elWarned = false;
+  saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow();
+});
+$('#sTest').onclick = () => {
+  const keys = ['voiceURI','rate','tts','elKey','elVoice','elModel'], prev = {};
+  keys.forEach(k => prev[k] = settings[k]);
+  Object.assign(settings, { voiceURI:$('#sVoice').value, rate:parseFloat($('#sRate').value), tts:$('#sEngine').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
+  tts.elDisabled = false; tts.elWarned = false;
+  speak('Tutti i sistemi sono operativi. Come posso esserle utile?', { force:true }).then(() => Object.assign(settings, prev));
+};
+$('#sClear').onclick = () => { history = []; transcript = []; store.set('history', []); store.set('transcript', []); $('#log').innerHTML = ''; welcome(); toast('Nuova conversazione'); };
+
+/* ================= Eventi ================= */
+$('#btnSettings').onclick = openSettings;
+$('#btnData').onclick = () => { renderData(); setSyncStatus(syncMsg); $('#dlgData').showModal(); };
+$('#dClose').onclick = () => $('#dlgData').close();
+$('#todoAdd').onclick = () => { const v = $('#todoNew').value.trim(); if (v){ todos.push({ id:uid(), text:v, done:false }); $('#todoNew').value = ''; saveTodos(); } };
+$('#todoNew').onkeydown = e => { if (e.key === 'Enter') $('#todoAdd').click(); };
+$('#attach').onclick = () => $('#file').click();
+$('#file').onchange = async e => {
+  for (const f of e.target.files){ try{ pending.push(await readAttachment(f)); }catch(err){ toast(err.message); } }
+  e.target.value = ''; renderPending(); $('#input').focus();
+};
+function orbAction(){
+  if (dictation){ stopDictation(); return; }
+  if (recMode === 'command'){ rec.stop(); return; }
+  if (document.body.classList.contains('s-speaking')){ stopSpeaking(true); return; }
+  if (busy) return;
+  listenCommand();
+}
+$('#orb').onclick = orbAction;
+function sendInput(){ const v = $('#input').value.trim(); if (v || pending.length){ $('#input').value = ''; handleUser(v, pending.splice(0)); } }
+$('#send').onclick = sendInput;
+$('#input').onkeydown = e => { if (e.key === 'Enter') sendInput(); };
+document.addEventListener('keydown', e => { if (e.ctrlKey && e.code === 'Space'){ e.preventDefault(); orbAction(); } });
+document.addEventListener('pointerdown', () => {
+  chime(0);
+  try{ if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }catch(e){}
+}, { once:true });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && settings.wake){ keepAwake(true); resumeWake(); } });
+
+function welcome(){
+  addMsg('bot', `Salve${settings.userName ? ', ' + settings.userName : ''}. Sono ${settings.name}. Tocca la rete e parlami, oppure scrivi qui sotto.`);
+  const ex = ['Buongiorno', 'Che tempo fa domani a Milano?', 'Timer di 10 minuti per la pasta', 'Ogni mattina alle 7 e mezza fai la routine buongiorno', 'Dettami una nota', 'Dove sono?', 'Trova una farmacia qui vicino', 'Metti il suono della pioggia per 20 minuti', 'Aggiungi latte e uova alla lista', 'Cosa vedi?', 'Scansiona un QR', 'Accendi la torcia', 'Che ore sono a Tokyo?', 'Quanto vale un bitcoin?', 'Condividi la lista della spesa', "Ultime notizie sull'intelligenza artificiale", 'Come si pronuncia grazie in giapponese?', 'Fai partire il cronometro', 'Genera una password sicura'];
+  addActions(ex.map(t => ({ label:t, fn:() => handleUser(t) })), 'examples');
+  if (!settings.apiKey){
+    addMsg('bot dim', 'Per iniziare apri le impostazioni, inserisci la tua API key Anthropic e poi avvia il controllo sistema.');
+    addActions([{ label:'Apri impostazioni', fn:openSettings }, { label:'Controllo sistema', fn:openDiag }]);
+  } else addActions([{ label:'Controllo sistema', fn:openDiag }]);
+  if (!window.isSecureContext) addMsg('err', 'Microfono e fotocamera funzionano solo in HTTPS o su localhost.');
+  if (!SR) addMsg('bot dim', 'Questo browser non supporta il riconoscimento vocale: usa Chrome o Edge per parlare. La scrittura funziona ovunque.');
+}
+applySettings();
+if (transcript.length){ transcript.forEach(e => addMsg(e.k, e.t)); addMsg('tool', '› conversazione ripresa'); } else welcome();
+if (settings.ghToken) setTimeout(syncNow, 800);
+</script>
+</body>
+</html>
