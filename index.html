@@ -587,8 +587,9 @@ function listenCommand(){
   };
   try{ rec.start(); setState('listening'); }catch(e){ rec = null; recMode = null; }
 }
+let wakeBlocked = false;
 function startWake(){
-  if (!SR || !settings.wake || busy || rec) return;
+  if (!SR || !settings.wake || busy || rec || wakeBlocked) return;
   rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'wake';
   rec.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++){
@@ -597,7 +598,15 @@ function startWake(){
       for (const nm of wakeNames()){ const idx = tl.indexOf(nm); if (idx >= 0){ pendingWake = t.slice(idx + nm.length).replace(/^[\s,.!?]+/, ''); rec.stop(); return; } }
     }
   };
-  rec.onerror = e => { if (e.error === 'not-allowed'){ settings.wake = false; saveSettings(); toast('Permesso microfono negato'); } };
+  rec.onerror = e => {
+    if (e.error !== 'not-allowed' && e.error !== 'service-not-allowed') return;
+    wakeBlocked = true;   // il browser blocca il microfono (app appena aperta, in secondo piano…): riprovo al primo tocco
+    const perm = navigator.permissions && navigator.permissions.query ? navigator.permissions.query({ name:'microphone' }).catch(() => null) : Promise.resolve(null);
+    perm.then(st => {
+      if (st && st.state === 'denied'){ settings.wake = false; saveSettings(); toast('Permesso microfono negato: riattivalo dalle impostazioni del browser'); }
+      else toast('Ascolto in pausa: tocca lo schermo per riattivarlo');
+    });
+  };
   rec.onend = () => {
     rec = null; recMode = null;
     if (pendingWake !== null){
@@ -609,6 +618,7 @@ function startWake(){
   try{ rec.start(); setState('wake'); }catch(e){ rec = null; recMode = null; }
 }
 function resumeWake(){ if (settings.wake) setTimeout(startWake, 400); }
+document.addEventListener('pointerdown', () => { if (wakeBlocked){ wakeBlocked = false; resumeWake(); } }, true);
 function startBargeIn(){
   if (!settings.bargeIn || !SR || isAndroid || rec || dictation || !tts.speaking) return;
   rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'barge';
@@ -1235,7 +1245,12 @@ async function callClaude(messages, cb = {}){
   });
   if (!r.ok){
     const data = await r.json().catch(() => ({})), msg = (data.error && data.error.message) || 'HTTP ' + r.status;
-    if (settings.fetch && /web_fetch|beta/i.test(msg)){ settings.fetch = false; saveSettings(); toast('Lettura pagine web non disponibile per questo account: disattivata'); return callClaude(messages, cb); }
+    if (/thinking/i.test(msg) && /signature|bound to a different/i.test(msg) && !cb.__noThink){
+      let cur = messages.length - 1;
+      while (cur > 0 && !(messages[cur].role === 'user' && (typeof messages[cur].content === 'string' || messages[cur].content.some(b => b.type === 'text')))) cur--;
+      return callClaude(messages.map((m, i) => i < cur ? noThinking(m) : m), Object.assign({}, cb, { __noThink:true }));
+    }
+    if (settings.fetch && /web_fetch|web-fetch/i.test(msg)){ settings.fetch = false; saveSettings(); toast('Lettura pagine web non disponibile per questo account: disattivata'); return callClaude(messages, cb); }
     throw new Error(msg);
   }
   const reader = r.body.getReader(), dec = new TextDecoder();
@@ -1286,7 +1301,7 @@ async function runAgent(turn, speaker){
   let final = '';
   for (let step = 0; step < 12; step++){
     let bubble = null, acc = '';
-    const data = await callClaude([...history.flat(), ...turn], {
+    const data = await callClaude([...history.flat().map(noThinking), ...turn], {
       onText:t => { if (!bubble) bubble = addMsg('bot', ''); acc += t; bubble.textContent = cleanText(acc); scrollLog(); speaker.push(t); NN.pulse(); },
       onBlockStart:b => { if (b.type === 'server_tool_use'){ NN.burst(4); NN.label(TOOL_LABEL[b.name] || b.name); } }
     });
@@ -1314,6 +1329,11 @@ async function runAgent(turn, speaker){
 }
 function logT(k, t){ transcript.push({ k, t }); if (transcript.length > 80) transcript = transcript.slice(-80); store.set('transcript', transcript); }
 function persistHistory(){ store.set('history', history.map(t => t.map(m => ({ role:m.role, content:stripHeavy(m.content) })))); }
+function noThinking(m){   // i blocchi di ragionamento dei turni conclusi non servono e scadono se cambiano istruzioni o strumenti
+  if (!Array.isArray(m.content)) return m;
+  const c = m.content.filter(b => b.type !== 'thinking' && b.type !== 'redacted_thinking');
+  return Object.assign({}, m, { content:c.length ? c : [{ type:'text', text:'…' }] });
+}
 function stripHeavy(c){
   if (!Array.isArray(c)) return c;
   const out = c.filter(b => b.type !== 'thinking' && b.type !== 'redacted_thinking').map(b => (b.type === 'image' || b.type === 'document') ? { type:'text', text:'[allegato non più disponibile]' }
