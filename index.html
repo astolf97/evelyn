@@ -85,6 +85,13 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
 .list .x{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1.1rem}
 .list .empty{background:none;color:var(--dim);font-size:.9rem}
 .d-ok{color:var(--mint)} .d-warn{color:var(--amber)} .d-bad{color:var(--danger)}
+.plancia{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:center;font-family:var(--display);font-size:.85rem;color:var(--dim);padding:0 16px 6px}
+.plancia b{color:var(--text);font-weight:500}
+.pl-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mint);margin-right:5px;vertical-align:middle}
+.pl-dot.bad{background:var(--danger)}
+.lock{position:fixed;inset:0;background:var(--ink);z-index:50;display:flex;align-items:center;justify-content:center}
+.lockbox{display:flex;flex-direction:column;gap:12px;align-items:center;width:min(320px,90vw)}
+.lockbox input{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:1.4rem;text-align:center;letter-spacing:.4em;width:100%;color:var(--text)}
 </style>
 </head>
 <body class="s-idle">
@@ -100,6 +107,7 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
     <span id="nnLabel" class="nnlabel"></span>
   </button>
   <div id="live" class="live"></div>
+  <div id="plancia" class="plancia" hidden></div>
   <section id="log" class="log" aria-live="polite"></section>
 </main>
 <footer class="bar">
@@ -112,6 +120,15 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
   <input id="file" type="file" multiple accept="image/*,application/pdf,text/*,.md,.csv,.json,.log" hidden>
 </footer>
 <div id="toast" class="toast" role="status"></div>
+<div id="lock" class="lock" hidden>
+  <div class="lockbox">
+    <div class="brand"><span class="dot"></span><span id="lockName">Evelyn</span></div>
+    <p class="hint">Inserisci il PIN</p>
+    <input id="pinIn" type="password" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="PIN">
+    <button id="pinOk" class="primary">Sblocca</button>
+    <p id="pinMsg" class="hint"></p>
+  </div>
+</div>
 
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg">
@@ -122,8 +139,10 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
         <option value="claude-sonnet-5-5">Sonnet 5.5, equilibrato</option>
         <option value="claude-haiku-4-5-20251001">Haiku 4.5, più rapido ed economico</option>
         <option value="claude-opus-5-5">Opus 5.5, più potente</option>
+        <option value="auto">Automatico: Haiku per le cose semplici, Sonnet per il resto</option>
       </select>
     </label>
+    <p class="hint" id="sUsage"></p>
     <div class="row">
       <label>Nome assistente<input id="sName"></label>
       <label>Come ti chiama<input id="sUser" placeholder="il tuo nome"></label>
@@ -152,6 +171,20 @@ dialog::backdrop{background:rgba(5,10,18,.7)}
       <label>ElevenLabs, ID voce<input id="sElVoice" autocomplete="off"></label>
       <label>Modello<select id="sElModel"><option value="eleven_flash_v2_5">Flash, più rapido</option><option value="eleven_multilingual_v2">Multilingual, più espressivo</option></select></label>
     </div>
+    <h2>Riconoscimento vocale</h2>
+    <label>Motore<select id="sStt"><option value="google">Google (integrato in Chrome ed Edge, gratis)</option><option value="whisper">Whisper di OpenAI (più preciso con termini tecnici)</option></select></label>
+    <label>OpenAI, API key (solo per Whisper)<input id="sOaiKey" type="password" autocomplete="off"></label>
+    <label class="check"><input id="sBarge" type="checkbox"> Interruzione a voce: di' "basta" mentre parla (solo PC)</label>
+    <h2>Gateway e sorveglianza</h2>
+    <label class="check"><input id="sMonitor" type="checkbox"> Sorveglianza: interroga il gateway a intervalli e avvisa a voce se cambia qualcosa</label>
+    <div class="row">
+      <label>Ogni quanti minuti<input id="sMonitorMin" type="number" min="1" max="60"></label>
+      <label>Webhook da interrogare<select id="sMonitorHook"></select></label>
+    </div>
+    <label class="check"><input id="sPlancia" type="checkbox"> Plancia sotto la rete: servizi, coda e traffico di oggi</label>
+    <div class="btns" style="justify-content:flex-start"><button type="button" id="sMonNow">Controlla adesso</button><button type="button" id="sPush">Attiva notifiche push dal gateway</button></div>
+    <h2>Sicurezza</h2>
+    <label>PIN all'apertura (vuoto = non cambiare, 0 = rimuovere)<input id="sPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
     <h2>Integrazioni facoltative</h2>
     <label>Home Assistant, indirizzo<input id="sHaUrl" placeholder="https://casa.example.com" autocomplete="off"></label>
     <label>Home Assistant, token di accesso<input id="sHaToken" type="password" autocomplete="off"></label>
@@ -212,7 +245,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
 };
-const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', followUp:true, ghToken:'', gistId:'' };
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, pin:'', bargeIn:true, stt:'google', oaiKey:'', pushOn:false };
 const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
 const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
 const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -426,7 +459,7 @@ function stopSpeaking(mute){
   tts.token++; tts.q = []; tts.busy = false; if (mute) tts.mutedTurn = true;
   try{ speechSynthesis.cancel(); }catch(e){}
   if (tts.audio){ try{ tts.audio.pause(); }catch(e){} tts.audio = null; }
-  if (tts.speaking){ tts.speaking = false; setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+  if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
   tts.waiters.splice(0).forEach(f => f());
   if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
 }
@@ -512,13 +545,14 @@ async function pump(){
   if (tts.busy) return;
   const item = tts.q.shift();
   if (!item){
-    if (tts.speaking){ tts.speaking = false; setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+    if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
     if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
     tts.waiters.splice(0).forEach(f => f()); return;
   }
   const token = tts.token; tts.busy = true;
   if (!tts.speaking){ tts.speaking = true; setState('speaking'); duckAmbient(true); }
   if (recMode === 'wake'){ stopRec(); tts.wasWake = true; }
+  if (!rec) startBargeIn();
   try{
     let played = false;
     if (useEleven()){
@@ -569,13 +603,67 @@ function startWake(){
     rec = null; recMode = null;
     if (pendingWake !== null){
       const c = pendingWake; pendingWake = null;
-      if (c.length > 2) handleUser(c, [], { voice:true }); else { chime(); listenCommand(); }
+      if (c.length > 2) handleUser(c, [], { voice:true }); else { chime(); listenAny(); }
     } else if (settings.wake && !busy) setTimeout(startWake, 300);
     else setState('idle');
   };
   try{ rec.start(); setState('wake'); }catch(e){ rec = null; recMode = null; }
 }
 function resumeWake(){ if (settings.wake) setTimeout(startWake, 400); }
+function startBargeIn(){
+  if (!settings.bargeIn || !SR || isAndroid || rec || dictation || !tts.speaking) return;
+  rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'barge';
+  rec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++){
+      const t = e.results[i][0].transcript.toLowerCase();
+      if (/\b(basta|stop|fermati|zitta|zitto|silenzio)\b/.test(t)){ stopSpeaking(true); toast('Ok, mi fermo'); return; }
+    }
+  };
+  rec.onerror = () => {};
+  rec.onend = () => { if (recMode === 'barge'){ rec = null; recMode = null; if (tts.speaking) setTimeout(startBargeIn, 200); } };
+  try{ rec.start(); }catch(e){ rec = null; recMode = null; }
+}
+const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : listenCommand();
+let wrec = null;
+async function listenWhisper(){
+  if (wrec){ wrec.stopNow(); return; }
+  stopRec(); stopSpeaking();
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }catch(e){ toast('Microfono: ' + e.message); return; }
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
+  const src = actx.createMediaStreamSource(stream), an2 = actx.createAnalyser(); an2.fftSize = 512; src.connect(an2);
+  const buf = new Uint8Array(an2.fftSize);
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+  const mr = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined), chunks = [];
+  mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  let spoke = false, silence = 0, timer; const t0 = Date.now();
+  const stopNow = () => { clearInterval(timer); if (mr.state !== 'inactive') mr.stop(); };
+  wrec = { stopNow };
+  setState('listening'); $('#live').textContent = 'Parla, tocca di nuovo la rete quando hai finito';
+  timer = setInterval(() => {
+    an2.getByteTimeDomainData(buf); let sum = 0;
+    for (const v of buf){ const x = (v - 128) / 128; sum += x * x; }
+    const rms = Math.sqrt(sum / buf.length);
+    if (rms > 0.02){ spoke = true; silence = 0; NN.pulse(); } else if (spoke) silence += 100;
+    if ((spoke && silence > 1400) || Date.now() - t0 > 30000 || (!spoke && Date.now() - t0 > 7000)) stopNow();
+  }, 100);
+  mr.onstop = async () => {
+    wrec = null; stream.getTracks().forEach(t => t.stop()); try{ src.disconnect(); }catch(e){}
+    if (!spoke){ $('#live').textContent = ''; setState('idle'); resumeWake(); return; }
+    setState('thinking'); $('#live').textContent = 'Trascrivo…';
+    try{
+      const blob = new Blob(chunks, { type:mr.mimeType || 'audio/webm' }), fd = new FormData();
+      fd.append('file', blob, 'audio.' + (blob.type.includes('mp4') ? 'mp4' : 'webm')); fd.append('model', 'whisper-1'); fd.append('language', settings.lang.slice(0, 2)); fd.append('response_format', 'json');
+      const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method:'POST', headers:{ Authorization:'Bearer ' + settings.oaiKey }, body:fd });
+      const d = await r.json(); $('#live').textContent = '';
+      if (!r.ok) throw new Error((d.error && d.error.message) || 'HTTP ' + r.status);
+      const text = (d.text || '').trim();
+      if (text) handleUser(text, pending.splice(0), { voice:true }); else { setState('idle'); resumeWake(); }
+      renderPending();
+    }catch(e){ $('#live').textContent = ''; toast('Whisper: ' + e.message); setState('idle'); resumeWake(); }
+  };
+  mr.start(250);
+}
 let pendingDictation = null, dictation = null;
 function startDictation(opts){
   pendingDictation = null;
@@ -1085,7 +1173,7 @@ function systemPrompt(){
     sarcastica:`${g("un'assistente", 'un assistente')} personale a comando vocale ${g('brillante e sarcastica', 'brillante e sarcastico')}: ${g('spiritosa e pungente', 'spiritoso e pungente')}, ma mai ${g('scortese', 'scortese')} e sempre ${g('utile', 'utile')}`
   };
   const persona = settings.persona === 'custom' && settings.personaCustom ? settings.personaCustom : (PERSONE[settings.persona] || PERSONE.classica);
-  return `Sei ${settings.name}, ${persona}. Ti riferisci a te ${g('al femminile', 'al maschile')}.
+  const fixed = `Sei ${settings.name}, ${persona}. Ti riferisci a te ${g('al femminile', 'al maschile')}.
 Parli in ${LANGS[settings.lang] || 'italiano'}${settings.userName ? ` e ti rivolgi all'utente chiamandolo ${settings.userName}` : ''}.
 Le risposte vengono lette ad alta voce: di norma una-tre frasi, niente markdown, elenchi o emoji, niente URL letti per intero, numeri e unità scritti in modo naturale da pronunciare. Per contenuti lunghi (riassunti di documenti, analisi) puoi essere più esteso ma sempre in prosa scorrevole.
 Usa gli strumenti invece di inventare: ricerca web per notizie, risultati, prezzi e fatti recenti; calculate per i conti; get_weather per il meteo. Puoi usare più strumenti in sequenza. Dopo un'azione conferma in breve cosa hai fatto.
@@ -1093,12 +1181,46 @@ Quando compare un pulsante da toccare (messaggi, chiamate, link bloccati, calend
 Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remember. Se servono un numero o un contatto che non conosci, chiedilo.
 Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
 Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
-Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}
+I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
+  const dynamic = `Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.
 Routine disponibili:
 ${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
 Cosa sai dell'utente:
 ${memory.length ? memory.map(m => '- ' + m.fact).join('\n') : '(ancora niente)'}
 Note salvate: ${notes.length} (cercale con manage_notes). Cose da fare aperte: ${open.length ? open.join('; ') : 'nessuna'}.`;
+  return [{ type:'text', text:fixed, cache_control:{ type:'ephemeral' } }, { type:'text', text:dynamic }];
+}
+function cachedTools(){
+  const t = getTools(); let i = t.length - 1;
+  while (i >= 0 && t[i].type) i--;
+  if (i >= 0) t[i] = Object.assign({}, t[i], { cache_control:{ type:'ephemeral' } });
+  return t;
+}
+let curModel = '';
+const modelOrDefault = () => settings.model === 'auto' ? 'claude-sonnet-5-5' : settings.model;
+function pickModel(text, atts){
+  if (settings.model !== 'auto') return settings.model;
+  if (atts.length) return 'claude-sonnet-5-5';
+  const t = text.toLowerCase();
+  const complex = /(perch|spieg|analizz|confront|scriv|riassum|codice|traduc|strategi|consigl|ragion|valut|report|gateway|traffico|coda|provider|routine|dett|allarm)/.test(t) || t.split(/\s+/).length > 14;
+  return complex ? 'claude-sonnet-5-5' : 'claude-haiku-4-5-20251001';
+}
+function recordUsage(u){
+  if (!u) return;
+  const day = new Date().toISOString().slice(0, 10), all = store.get('usage', {});
+  const d = all[day] || { calls:0, in:0, out:0, cr:0, cw:0 };
+  d.calls++; d.in += u.input_tokens || 0; d.out += u.output_tokens || 0; d.cr += u.cache_read_input_tokens || 0; d.cw += u.cache_creation_input_tokens || 0;
+  all[day] = d;
+  const cutoff = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10);
+  for (const k of Object.keys(all)) if (k < cutoff) delete all[k];
+  store.set('usage', all);
+}
+function usageText(){
+  const all = store.get('usage', {}), day = new Date().toISOString().slice(0, 10), mon = day.slice(0, 7);
+  const sum = ks => ks.reduce((a, k) => { const d = all[k]; a.calls += d.calls; a.in += d.in + d.cr + d.cw; a.out += d.out; a.cr += d.cr; return a; }, { calls:0, in:0, out:0, cr:0 });
+  const t = sum(Object.keys(all).filter(k => k === day)), m = sum(Object.keys(all).filter(k => k.startsWith(mon)));
+  const f = n => n >= 1e6 ? (n / 1e6).toFixed(2) + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1) + ' k' : String(n);
+  return `Consumo oggi: ${t.calls} chiamate, ${f(t.in)} token in ingresso (${t.in ? Math.round(t.cr * 100 / t.in) : 0}% dalla cache), ${f(t.out)} in uscita. Mese: ${m.calls} chiamate, ${f(m.in)} in ingresso, ${f(m.out)} in uscita.`;
 }
 function apiHeaders(){
   const h = { 'content-type':'application/json', 'x-api-key':settings.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' };
@@ -1109,7 +1231,7 @@ async function callClaude(messages, cb = {}){
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:apiHeaders(),
-    body:JSON.stringify({ model:settings.model, max_tokens:2000, system:systemPrompt(), tools:getTools(), messages, stream:true })
+    body:JSON.stringify({ model:curModel || modelOrDefault(), max_tokens:2000, system:systemPrompt(), tools:cachedTools(), messages, stream:true })
   });
   if (!r.ok){
     const data = await r.json().catch(() => ({})), msg = (data.error && data.error.message) || 'HTTP ' + r.status;
@@ -1117,9 +1239,10 @@ async function callClaude(messages, cb = {}){
     throw new Error(msg);
   }
   const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = '', stop = null; const blocks = [];
+  let buf = '', stop = null; const blocks = [], usage = {};
   const handle = ev => {
     switch (ev.type){
+      case 'message_start': Object.assign(usage, (ev.message && ev.message.usage) || {}); break;
       case 'content_block_start': {
         const b = Object.assign({}, ev.content_block);
         if (b.type === 'text') b.text = b.text || '';
@@ -1141,7 +1264,7 @@ async function callClaude(messages, cb = {}){
         if (b && '_json' in b){ try{ b.input = b._json ? JSON.parse(b._json) : (b.input || {}); }catch(e){ b.input = {}; } delete b._json; }
         break;
       }
-      case 'message_delta': if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; break;
+      case 'message_delta': if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason; if (ev.usage) Object.assign(usage, ev.usage); break;
       case 'error': throw new Error((ev.error && ev.error.message) || 'Errore durante la risposta');
     }
   };
@@ -1156,6 +1279,7 @@ async function callClaude(messages, cb = {}){
       handle(ev);
     }
   }
+  recordUsage(usage);
   return { content:blocks.filter(Boolean), stop_reason:stop };
 }
 async function runAgent(turn, speaker){
@@ -1203,7 +1327,7 @@ function trimHistory(){
 async function handleUser(text, atts = [], opts = {}){
   if (busy) return;
   if (!settings.apiKey){ openSettings(); toast('Inserisci la tua API key Anthropic'); return; }
-  busy = true; stopRec(); stopSpeaking(); tts.mutedTurn = false; renderPending();
+  busy = true; stopRec(); stopSpeaking(); tts.mutedTurn = false; renderPending(); curModel = pickModel(text, atts);
   text = text || 'Analizza gli allegati.';
   addMsg('user', text); logT('user', text + (atts.length ? ' (📎 ' + atts.map(a => a.name).join(', ') + ')' : ''));
   atts.forEach(a => a.kind === 'image' ? addImage(a.preview, true) : addMsg('user', '📎 ' + a.name));
@@ -1222,7 +1346,7 @@ async function handleUser(text, atts = [], opts = {}){
     busy = false;
     if (!tts.speaking) setState('idle');
     if (pendingDictation) setTimeout(() => { if (!busy) startDictation(pendingDictation); }, 300);
-    else if (opts.voice && settings.followUp && reply && !tts.mutedTurn && SR) setTimeout(() => { if (!busy && !rec) listenCommand(); }, 250);
+    else if (opts.voice && settings.followUp && reply && !tts.mutedTurn && SR) setTimeout(() => { if (!busy && !rec) listenAny(); }, 250);
     else resumeWake();
   }
 }
@@ -1371,7 +1495,7 @@ setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60
 
 /* ================= Controllo sistema ================= */
 async function apiPing(web){
-  const body = { model:settings.model, max_tokens:16, messages:[{ role:'user', content:'Rispondi solo: ok' }] };
+  const body = { model:modelOrDefault(), max_tokens:16, messages:[{ role:'user', content:'Rispondi solo: ok' }] };
   if (web) body.tools = [{ type:'web_search_20250305', name:'web_search', max_uses:1 }];
   const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST',
     headers:{ 'content-type':'application/json', 'x-api-key':settings.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' }, body:JSON.stringify(body) });
@@ -1428,6 +1552,119 @@ $('#diagRun').onclick = runDiagnostics;
 $('#diagClose').onclick = () => $('#dlgDiag').close();
 $('#sDiag').onclick = () => { $('#dlgSettings').close('ok'); openDiag(); };
 
+/* ================= Gateway: sorveglianza, plancia, push ================= */
+let monT = null, planT = null, monState = store.get('monState', { ids:[] });
+function hookBase(){
+  const h = hooks().find(x => /\/webhooks\/evelyn\//.test(x.url)); if (!h) return null;
+  const u = new URL(h.url); return { base:u.origin + u.pathname.replace(/\/[^/]+$/, ''), key:u.searchParams.get('k') || '' };
+}
+async function callHook(h, payload){
+  const r = await fetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload || {}) });
+  const txt = await r.text(); try{ return JSON.parse(txt); }catch(e){ return { riassunto:txt.slice(0, 500) }; }
+}
+function alertsFromStato(d){
+  const a = [];
+  for (const [u, s] of Object.entries(d.servizi || {})) if (s !== 'active') a.push({ id:'svc:' + u, sev:'crit', testo:`il servizio ${u} risulta ${s}` });
+  if (d.disco_pct >= 85) a.push({ id:'disk', sev:'warn', testo:`disco al ${d.disco_pct} per cento` });
+  if (d.carico && d.cpu && d.carico[0] > d.cpu * 2) a.push({ id:'load', sev:'warn', testo:`carico ${d.carico[0]} su ${d.cpu} CPU` });
+  if (d.senza_dlr_2h > 300) a.push({ id:'dlr', sev:'warn', testo:`${d.senza_dlr_2h} messaggi in attesa di esito da oltre due ore` });
+  if (d.errore) a.push({ id:'err', sev:'warn', testo:'il ponte risponde con errore: ' + d.errore });
+  return a;
+}
+function monitorHook(){ const hs = hooks(); return hs.find(x => x.name === settings.monitorHook) || hs.find(x => /allarm/i.test(x.name)) || hs.find(x => /stato/i.test(x.name)); }
+async function monitorTick(force, speakAll){
+  if (!settings.monitor && !force) return;
+  const h = monitorHook(); if (!h){ if (force) toast('Nessun webhook del gateway configurato'); return; }
+  try{
+    const d = await callHook(h, {});
+    const alerts = Array.isArray(d.alerts) ? d.alerts : alertsFromStato(d);
+    const ids = alerts.map(a => a.id), prev = monState.ids || [];
+    const nuovi = alerts.filter(a => !prev.includes(a.id)), rientrati = prev.filter(id => !ids.includes(id));
+    monState = { ids, at:Date.now() }; store.set('monState', monState);
+    if (speakAll && alerts.length){
+      const txt = 'Allarmi attivi sul gateway: ' + alerts.map(a => a.testo).join('; ') + '.';
+      addMsg('bot alert', '⚠️ ' + txt); logT('bot alert', '⚠️ ' + txt); if (!busy) speak(txt); return;
+    }
+    if (nuovi.length){
+      const txt = 'Attenzione: ' + nuovi.map(a => a.testo).join('; ') + '.';
+      chime(3); NN.burst(12); addMsg('bot alert', '⚠️ ' + txt); logT('bot alert', '⚠️ ' + txt); notify(txt); if (!busy) speak(txt);
+    } else if (rientrati.length){
+      const txt = 'Gateway: rientrato ' + (rientrati.length === 1 ? 'un allarme' : rientrati.length + ' allarmi') + '.';
+      addMsg('bot dim', txt); if (force && !busy) speak(txt);
+    } else if (force){
+      const txt = alerts.length ? alerts.length + ' allarmi ancora attivi.' : 'Gateway tranquillo, nessun allarme.';
+      addMsg('bot dim', txt); if (!busy) speak(txt);
+    }
+  }catch(e){ if (force) toast('Sorveglianza: ' + e.message); }
+}
+function startMonitor(){
+  clearInterval(monT); if (!settings.monitor) return;
+  monT = setInterval(() => { if (document.visibilityState === 'visible') monitorTick(); }, Math.max(1, settings.monitorMin || 5) * 60000);
+  setTimeout(monitorTick, 1500);
+}
+function renderPlancia(s, c, o){
+  const el = $('#plancia'); el.innerHTML = ''; el.hidden = false;
+  const add = (label, val, cls) => {
+    const sp = document.createElement('span');
+    if (cls){ const d = document.createElement('i'); d.className = 'pl-dot ' + cls; sp.appendChild(d); }
+    sp.appendChild(document.createTextNode(label + ' ')); const b = document.createElement('b'); b.textContent = val; sp.appendChild(b); el.appendChild(sp);
+  };
+  if (s && s.servizi){ const down = Object.entries(s.servizi).filter(([, v]) => v !== 'active').map(([k]) => k); add('Servizi', down.length ? 'fermi: ' + down.join(', ') : 'tutti attivi', down.length ? 'bad' : 'ok'); }
+  if (s && s.carico) add('Carico', s.carico[0] + ' su ' + s.cpu);
+  if (c && c.per_stato && typeof c.per_stato === 'object') add('Coda', String(Object.values(c.per_stato).reduce((a, b) => a + b, 0)));
+  if (o && o.segmenti !== undefined) add('Oggi', `${o.segmenti} seg, ${o.segmenti ? Math.round(o.consegnati * 100 / o.segmenti) : 0}% consegnati, margine ${o.margine}`);
+  if (s && s.senza_dlr_2h) add('Senza esito', String(s.senza_dlr_2h));
+  if (!el.children.length) el.hidden = true;
+}
+async function planciaTick(){
+  const el = $('#plancia'); const hs = hooks();
+  const st = hs.find(x => /stato/i.test(x.name) && !/scheduler/i.test(x.name)), co = hs.find(x => /coda/i.test(x.name)), og = hs.find(x => /traffico|oggi/i.test(x.name));
+  if (!settings.plancia || !st){ el.hidden = true; return; }
+  try{ const [s, c, o] = await Promise.all([callHook(st), co ? callHook(co) : null, og ? callHook(og) : null]); renderPlancia(s, c, o); }catch(e){}
+}
+function startPlancia(){ clearInterval(planT); if (!settings.plancia){ $('#plancia').hidden = true; return; } planciaTick(); planT = setInterval(() => { if (document.visibilityState === 'visible') planciaTick(); }, 120000); }
+function urlB64ToU8(str){ const pad = '='.repeat((4 - str.length % 4) % 4), b = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, ch => ch.charCodeAt(0)); }
+async function enablePush(){
+  const hb = hookBase(); if (!hb){ toast('Configura prima i webhook del gateway'); return; }
+  if (!swReg || !('PushManager' in window)){ toast('Notifiche push non disponibili in questo browser o da questo indirizzo'); return; }
+  try{
+    if ((await Notification.requestPermission()) !== 'granted'){ toast('Permesso notifiche negato'); return; }
+    const v = await (await fetch(`${hb.base}/push/vapid?k=${hb.key}`)).json().catch(() => ({}));
+    if (!v.publicKey){ toast('Il gateway non ha ancora il modulo push: serve la parte server'); return; }
+    const sub = await swReg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToU8(v.publicKey) });
+    const r = await fetch(`${hb.base}/push/subscribe?k=${hb.key}`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ subscription:sub.toJSON(), device:isAndroid ? 'android' : 'pc', name:settings.userName || '' }) });
+    if (!r.ok) throw new Error('il gateway ha risposto ' + r.status);
+    settings.pushOn = true; saveSettings(); toast('Notifiche push attive su questo dispositivo');
+  }catch(e){ toast('Push: ' + e.message); }
+}
+$('#sMonNow').onclick = () => { $('#dlgSettings').close('ok'); monitorTick(true, true); };
+$('#sPush').onclick = enablePush;
+
+/* ================= PIN e avvio ================= */
+async function sha(str){ if (!crypto.subtle) return 'plain:' + str; const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); return Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, '0')).join(''); }
+let unlocked = false;
+function afterUnlock(){
+  if (unlocked) return; unlocked = true;
+  startMonitor(); startPlancia();
+  const qp = new URLSearchParams(location.search);
+  setTimeout(() => {
+    const cmd = qp.get('cmd');
+    if (qp.get('alert')) monitorTick(true, true);
+    else if (cmd === 'stato') handleUser("Com'è il gateway?");
+    else if (cmd === 'dettatura') startDictation({});
+    else if (cmd) handleUser(cmd);
+    if ([...qp.keys()].length) window.history.replaceState(null, '', location.pathname);
+  }, 900);
+}
+async function tryUnlock(){
+  const v = $('#pinIn').value;
+  if (v && (await sha(v)) === settings.pin){ $('#lock').hidden = true; $('#pinIn').value = ''; $('#pinMsg').textContent = ''; afterUnlock(); }
+  else { $('#pinMsg').textContent = 'PIN errato'; $('#pinIn').value = ''; }
+}
+$('#pinOk').onclick = tryUnlock;
+$('#pinIn').onkeydown = e => { if (e.key === 'Enter') tryUnlock(); };
+function lockIfNeeded(){ if (!settings.pin){ afterUnlock(); return; } $('#lockName').textContent = settings.name; $('#lock').hidden = false; setTimeout(() => $('#pinIn').focus(), 100); }
+
 /* ================= Impostazioni ================= */
 function applyAccent(){
   const c = ACCENTS[settings.accent] || ACCENTS.cyan;
@@ -1444,12 +1681,20 @@ function openSettings(){
   $('#sSpeak').checked = settings.speak; $('#sWake').checked = settings.wake; $('#sWeb').checked = settings.web;
   $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
   $('#sFollow').checked = settings.followUp; $('#sEngine').value = settings.tts; $('#sElKey').value = settings.elKey; $('#sElVoice').value = settings.elVoice; $('#sElModel').value = settings.elModel; $('#sGh').value = settings.ghToken;
+  $('#sStt').value = settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
+  $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia; $('#sPin').value = '';
+  const mh = $('#sMonitorHook'); mh.innerHTML = ''; const hs = hooks();
+  if (!hs.length){ const o = document.createElement('option'); o.value = ''; o.textContent = 'nessun webhook configurato'; mh.appendChild(o); }
+  hs.forEach(h => { const o = document.createElement('option'); o.value = h.name; o.textContent = h.name; mh.appendChild(o); });
+  mh.value = settings.monitorHook || (hs.find(x => /allarm/i.test(x.name)) || hs.find(x => /stato/i.test(x.name)) || hs[0] || { name:'' }).name;
+  $('#sUsage').textContent = usageText();
   $('#sHaUrl').value = settings.haUrl; $('#sHaToken').value = settings.haToken; $('#sHooks').value = settings.hooks;
   loadVoices(); $('#dlgSettings').showModal();
 }
 $('#sRate').oninput = e => $('#sRateVal').textContent = e.target.value + '×';
-$('#dlgSettings').addEventListener('close', () => {
+$('#dlgSettings').addEventListener('close', async () => {
   if ($('#dlgSettings').returnValue !== 'ok') return;
+  const pinV = $('#sPin').value.trim(); if (pinV === '0') settings.pin = ''; else if (pinV) settings.pin = await sha(pinV);
   Object.assign(settings, {
     apiKey:$('#sKey').value.trim(), model:$('#sModel').value, name:$('#sName').value.trim() || 'Evelyn', userName:$('#sUser').value.trim(),
     voiceURI:$('#sVoice').value, rate:parseFloat($('#sRate').value), speak:$('#sSpeak').checked, wake:$('#sWake').checked, web:$('#sWeb').checked,
@@ -1458,9 +1703,9 @@ $('#dlgSettings').addEventListener('close', () => {
   const newGh = $('#sGh').value.trim();
   if (newGh !== settings.ghToken){ settings.ghToken = newGh; settings.gistId = ''; meta.synced = false; store.set('meta', meta); }
   const newLang = $('#sLang').value; if (newLang !== settings.lang) settings.voiceURI = '';
-  Object.assign(settings, { persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
+  Object.assign(settings, { stt:$('#sStt').value, oaiKey:$('#sOaiKey').value.trim(), bargeIn:$('#sBarge').checked, monitor:$('#sMonitor').checked, monitorMin:Math.max(1, parseInt($('#sMonitorMin').value) || 5), monitorHook:$('#sMonitorHook').value, plancia:$('#sPlancia').checked, persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
   tts.elDisabled = false; tts.elWarned = false;
-  saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow();
+  saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow(); if (unlocked){ startMonitor(); startPlancia(); }
 });
 $('#sTest').onclick = () => {
   const keys = ['voiceURI','rate','tts','elKey','elVoice','elModel'], prev = {};
@@ -1484,10 +1729,11 @@ $('#file').onchange = async e => {
 };
 function orbAction(){
   if (dictation){ stopDictation(); return; }
+  if (wrec){ wrec.stopNow(); return; }
   if (recMode === 'command'){ rec.stop(); return; }
   if (document.body.classList.contains('s-speaking')){ stopSpeaking(true); return; }
   if (busy) return;
-  listenCommand();
+  listenAny();
 }
 $('#orb').onclick = orbAction;
 function sendInput(){ const v = $('#input').value.trim(); if (v || pending.length){ $('#input').value = ''; handleUser(v, pending.splice(0)); } }
@@ -1514,6 +1760,7 @@ function welcome(){
 applySettings();
 if (transcript.length){ transcript.forEach(e => addMsg(e.k, e.t)); addMsg('tool', '› conversazione ripresa'); } else welcome();
 if (settings.ghToken) setTimeout(syncNow, 800);
+lockIfNeeded();
 </script>
 </body>
 </html>

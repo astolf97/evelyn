@@ -1,4 +1,4 @@
-const CACHE = 'evelyn-v4';
+const CACHE = 'evelyn-v5';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {})); });
 self.addEventListener('activate', e => {
@@ -9,7 +9,20 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || u.origin !== location.origin) return;
   e.respondWith(fetch(e.request).then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cp)); return r; }).catch(() => caches.match(e.request)));
 });
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Evelyn', {
+    body: d.body || '', icon: './icon-192.png', badge: './icon-192.png', tag: d.tag || 'evelyn-' + Date.now(),
+    renotify: true, vibrate: [300, 150, 300], data: { url: d.url || './?alert=1' }
+  }));
+});
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(clients.matchAll({ type: 'window' }).then(cs => cs.length ? cs[0].focus() : clients.openWindow('./')));
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+    const c = cs.find(x => 'focus' in x);
+    if (c) { c.navigate ? c.navigate(url).catch(() => {}) : null; return c.focus(); }
+    return clients.openWindow(url);
+  }));
 });
