@@ -676,9 +676,47 @@ async function piperReady(voiceId, onProgress){
   }
   return m;
 }
+/* PIPER-WORKER-v1: la sintesi gira in un worker, così animazioni e tocchi restano fluidi anche con la voce Paola */
+const PIPER_WORKER_SRC = String.raw`
+const BASE = 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/dist/';
+const ORT = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/esm/ort.wasm.min.js';
+let lib = null;
+async function load(){
+  if (lib) return lib;
+  let src = await (await fetch(BASE + 'piper-tts-web.js')).text();
+  src = src.replace(/import\((['"])\.\/([^'"]+)\1\)/g, (m, q, f) => 'import(' + q + BASE + f + q + ')')
+           .replace(/(['"])onnxruntime-web\/wasm\1/g, JSON.stringify(ORT));
+  lib = await import(URL.createObjectURL(new Blob([src], { type:'text/javascript' })));
+  return lib;
+}
+self.onmessage = async e => {
+  const { id, text, voiceId } = e.data;
+  let m;
+  try{ m = await load(); }catch(err){ self.postMessage({ id, load:true, error:String(err && err.message || err) }); return; }
+  try{ self.postMessage({ id, wav:await m.predict({ text, voiceId }) }); }
+  catch(err){ self.postMessage({ id, error:String(err && err.message || err) }); }
+};`;
+let piperW = null, piperNoWorker = false, piperSeq = 0;
+const piperWait = new Map();
+function piperWorker(){
+  if (piperW) return piperW;
+  piperW = new Worker(URL.createObjectURL(new Blob([PIPER_WORKER_SRC], { type:'text/javascript' })), { type:'module' });
+  piperW.onmessage = e => {
+    const w = piperWait.get(e.data.id); if (!w) return; piperWait.delete(e.data.id);
+    if (e.data.error){ const err = new Error(e.data.error); err.load = !!e.data.load; w.rej(err); } else w.res(e.data.wav);
+  };
+  piperW.onerror = e => { const err = new Error('worker: ' + (e.message || 'non avviato')); err.load = true; piperWait.forEach(w => w.rej(err)); piperWait.clear(); piperW = null; };
+  return piperW;
+}
+const piperInWorker = (text, voiceId) => new Promise((res, rej) => { const id = ++piperSeq; piperWait.set(id, { res, rej }); piperWorker().postMessage({ id, text, voiceId }); });
 async function piperFetch(item){
-  const m = await piperReady(piperVoice());
-  const wav = await m.predict({ text:item.text, voiceId:piperVoice() });
+  await piperReady(piperVoice());
+  let wav = null;
+  if (!piperNoWorker){
+    try{ wav = await piperInWorker(item.text, piperVoice()); }
+    catch(e){ if (e.load){ piperNoWorker = true; console.warn('Piper nel worker non disponibile, uso il filo principale:', e.message); } else throw e; }
+  }
+  if (!wav) wav = await (await piperLib()).predict({ text:item.text, voiceId:piperVoice() });
   return URL.createObjectURL(wav);
 }
 function piperFail(e){
