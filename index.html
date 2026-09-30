@@ -240,6 +240,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
           </select>
         </label>
         <p class="hint" id="sUsage"></p>
+        <p class="hint" id="sClaude"></p>
         <label class="check"><input id="sWeb" type="checkbox"> Ricerca web</label>
         <label class="check"><input id="sFetch" type="checkbox"> Lettura di pagine web (beta: si disattiva da sola se non disponibile)</label>
       </div>
@@ -442,7 +443,12 @@ const saveMem = () => saveCol('memory', memory);
 const saveNotes = () => saveCol('notes', notes);
 const saveRoutines = () => saveCol('routines', routines);
 const fmtWhen = ms => new Date(ms).toLocaleString('it-IT', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-const hooks = () => settings.hooks.split('\n').map(l => l.split('|').map(s => s.trim())).filter(p => p.length >= 2 && p[0] && /^https?:\/\//.test(p[1])).map(p => ({ name:p[0], url:p.slice(1).join('|') }));
+const hooks = () => {   // CLAUDE-SALDO-v1: "gateway claude" si aggiunge da solo se c'è già un webhook del gateway
+  const hs = settings.hooks.split('\n').map(l => l.split('|').map(s => s.trim())).filter(p => p.length >= 2 && p[0] && /^https?:\/\//.test(p[1])).map(p => ({ name:p[0], url:p.slice(1).join('|') }));
+  const g = hs.find(x => /\/webhooks\/evelyn\/[a-z_]+/.test(x.url));
+  if (g && !hs.some(x => /\/webhooks\/evelyn\/claude\b/.test(x.url) || x.name === 'gateway claude')) hs.push({ name:'gateway claude', url:g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/claude') });
+  return hs;
+};
 const haOn = () => !!(settings.haUrl && settings.haToken);
 
 /* ================= Rete neurale animata ================= */
@@ -1466,7 +1472,7 @@ Quando compare un pulsante da toccare (messaggi, chiamate, link bloccati, calend
 Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remember. Se servono un numero o un contatto che non conosci, chiedilo.
 Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
 Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
-I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo". Per "cosa devo fare oggi", cose rimaste indietro o suggerimenti sui clienti usa "gateway crm": legge direttamente il CRM (scadenze, clienti fermi, onboarding, follow-up aperti) e ti dà già le priorità. Il gateway impara come l'utente chiama account, telefoni, clienti e paesi quando conferma un'azione: usa pure i suoi modi di dire. Se l'utente dice "ricorda che X è Y" riferito al gateway (un account, un telefono, un cliente, un paese), usa "gateway ricorda" con {"termine", "significa", "tipo"}; se un modo di dire è sbagliato o l'hai capito male (per esempio "mmd casa" invece di "mmd cas"), toglilo con "gateway ricorda" e {"termine": ..., "dimentica": true}, oppure {"significa": ..., "dimentica": true} per togliere tutti quelli che portano a quell'account; per sapere cosa è stato fatto di recente o ripetere un'azione passata ("rifai come ieri") usa "gateway memoria".${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
+I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo". Per "cosa devo fare oggi", cose rimaste indietro o suggerimenti sui clienti usa "gateway crm": legge direttamente il CRM (scadenze, clienti fermi, onboarding, follow-up aperti) e ti dà già le priorità. Il gateway impara come l'utente chiama account, telefoni, clienti e paesi quando conferma un'azione: usa pure i suoi modi di dire. Se l'utente dice "ricorda che X è Y" riferito al gateway (un account, un telefono, un cliente, un paese), usa "gateway ricorda" con {"termine", "significa", "tipo"}; se un modo di dire è sbagliato o l'hai capito male (per esempio "mmd casa" invece di "mmd cas"), toglilo con "gateway ricorda" e {"termine": ..., "dimentica": true}, oppure {"significa": ..., "dimentica": true} per togliere tutti quelli che portano a quell'account; per sapere cosa è stato fatto di recente o ripetere un'azione passata ("rifai come ieri") usa "gateway memoria". Per credito, saldo o spesa di Claude usa "gateway claude"; se l'utente dice quanto credito ha adesso o che ha ricaricato, passagli {"saldo": nuovo totale in dollari} (dopo una ricarica il totale è il credito rimasto più la ricarica: se non lo sai chiediglielo), e {"soglia": X} per l'avviso di credito basso.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
   const dynamic = `Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.
 Routine disponibili:
 ${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
@@ -1988,6 +1994,8 @@ function openSettings(){
   hs.forEach(h => { const o = document.createElement('option'); o.value = h.name; o.textContent = h.name; mh.appendChild(o); });
   mh.value = settings.monitorHook || (hs.find(x => /allarm/i.test(x.name)) || hs.find(x => /stato/i.test(x.name)) || hs[0] || { name:'' }).name;
   $('#sUsage').textContent = usageText();
+  const ch = hooks().find(x => x.name === 'gateway claude'), sc = $('#sClaude'); sc.textContent = '';   // CLAUDE-SALDO-v1
+  if (ch){ sc.textContent = 'Credito Claude: lettura…'; callHook(ch, {}).then(d => { sc.textContent = d.riassunto || d.errore || ''; }).catch(() => { sc.textContent = 'Credito Claude: gateway non raggiungibile.'; }); }
   $('#sHaUrl').value = settings.haUrl; $('#sHaToken').value = settings.haToken; $('#sHooks').value = settings.hooks;
   loadVoices(); setTab(store.get('setTab', 'gen')); $('#dlgSettings').showModal();
 }
