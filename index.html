@@ -939,7 +939,75 @@ function listenCommand(){   // STT-FIX-v2
   setTimeout(go, Math.max(0, 450 - (Date.now() - recStoppedAt)));   // STT-FIX-v1: il riconoscimento precedente deve chiudersi davvero
 }
 let wakeBlocked = false;
+// WAKE-SERVER-v1: parola di attivazione con Whisper sul gateway (dove il riconoscimento continuo di Chrome non trascrive).
+// Il telefono misura solo il volume; quando qualcuno parla ritaglia la frase (con 1 s di memoria per non perdere l'inizio),
+// la manda al gateway in WAV 16 kHz e cerca il nome nel testo. Un pezzo alla volta; i suoni sotto 0,3 s di parlato si scartano.
+function wavFromFloat(chunks, rate){
+  const len = chunks.reduce((n, c) => n + c.length, 0), ratio = rate / 16000, out = Math.floor(len / ratio);
+  const all = new Float32Array(len); let o = 0; for (const c of chunks){ all.set(c, o); o += c.length; }
+  const buf = new ArrayBuffer(44 + out * 2), dv = new DataView(buf), w = (p, t) => [...t].forEach((ch, i) => dv.setUint8(p + i, ch.charCodeAt(0)));
+  w(0, 'RIFF'); dv.setUint32(4, 36 + out * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, out * 2, true);
+  for (let i = 0; i < out; i++){ const v = Math.max(-1, Math.min(1, all[Math.floor(i * ratio)] || 0)); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
+  return new Blob([buf], { type:'audio/wav' });
+}
+function startWakeServer(){
+  if (!settings.wake || busy || rec || wakeBlocked || wrec || dictation) return;
+  const stub = { onend:null, stopped:false, abort(){ this.stopped = true; cleanup(); }, stop(){ this.stopped = true; cleanup(); } };
+  rec = stub; recMode = 'wake'; setState('wake');
+  let stream = null, src = null, proc = null, inFlight = false;
+  const cleanup = () => {
+    try{ proc && proc.disconnect(); src && src.disconnect(); }catch(e){}
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (rec === stub){ rec = null; recMode = null; recStoppedAt = Date.now(); }
+  };
+  navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }).then(st => {
+    stream = st;
+    if (stub.stopped){ cleanup(); return; }
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    src = actx.createMediaStreamSource(stream); proc = actx.createScriptProcessor(4096, 1, 1);
+    src.connect(proc); proc.connect(actx.destination);   // l'uscita resta muta: serve solo a far girare l'elaborazione
+    const rate = actx.sampleRate, pre = [], clip = []; let preLen = 0, talking = false, voiced = 0, silent = 0, clipLen = 0;
+    proc.onaudioprocess = e => {
+      if (stub.stopped) return;
+      const d = new Float32Array(e.inputBuffer.getChannelData(0)), ms = d.length / rate * 1000;
+      let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+      const loud = Math.sqrt(sum / d.length) > 0.015;
+      if (!talking){
+        pre.push(d); preLen += d.length; while (preLen > rate && pre.length > 1) preLen -= pre.shift().length;   // 1 s di memoria
+        if (loud){ talking = true; clip.length = 0; clip.push(...pre); clipLen = preLen; voiced = ms; silent = 0; NN.pulse(); }
+        return;
+      }
+      clip.push(d); clipLen += d.length;
+      if (loud){ voiced += ms; silent = 0; NN.pulse(); } else silent += ms;
+      if (silent > 700 || clipLen / rate > 5){
+        talking = false; pre.length = 0; preLen = 0;
+        if (voiced < 300 || inFlight || !sttHook()) return;
+        inFlight = true;
+        const blob = wavFromFloat(clip.splice(0), rate), u = sttHook();
+        fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':'audio/wav' }, body:blob })
+          .then(r => r.json()).then(j => {
+            inFlight = false;
+            if (stub.stopped || !j || !j.text) return;
+            const t = j.text.trim(), tl = t.toLowerCase();
+            for (const nm of wakeNames()){
+              const idx = tl.indexOf(nm); if (idx < 0) continue;
+              const cmd = t.slice(idx + nm.length).replace(/^[\s,.!?]+/, '').trim();
+              stub.stopped = true; cleanup();
+              if (cmd.length > 2) handleUser(cmd, [], { voice:true }); else { chime(); listenAny(); }
+              return;
+            }
+          }).catch(() => { inFlight = false; });
+      }
+    };
+  }).catch(e => {
+    cleanup(); wakeBlocked = true;
+    if (/denied|NotAllowed/i.test(e.name + e.message)) toast('Ascolto in pausa: tocca lo schermo per riattivarlo');
+  });
+}
 function startWake(){
+  if (settings.wake && useServerStt() && navigator.mediaDevices && (window.AudioContext || window.webkitAudioContext)){ startWakeServer(); return; }   // WAKE-SERVER-v1
   if (!SR || !settings.wake || busy || rec || wakeBlocked) return;
   rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'wake';
   rec.onresult = e => {
