@@ -771,7 +771,7 @@ const SAY_AS = [[/\bSIM\b/g, 'sim'], [/\bSIMs\b/g, 'sim'], [/\bPIN\b/g, 'pin'], 
 const sayAs = t => SAY_AS.reduce((x, [re, w]) => x.replace(re, w), t);
 function splitSpeech(text){
   const clean = sayAs(cleanText(text)).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
-  const sentences = clean.match(/[^.!?;:\n]+[.!?;:\n]*\s*/g) || [clean];
+  const sentences = clean.match(/[^.!?\n]+[.!?\n]*\s*/g) || [clean];   // TTS-PAUSE-v1
   const parts = []; let buf = '';
   for (const s of sentences){ if ((buf + s).length > 320 && buf){ parts.push(buf); buf = ''; } buf += s; }
   if (buf.trim()) parts.push(buf);
@@ -787,7 +787,7 @@ function makeStreamSpeaker(){
   let buf = '', first = true;   // TTS-FLOW-v1: il primo pezzo parte subito, i successivi più lunghi = meno stacchi tra un audio e l'altro
   return {
     push(t){
-      buf += t; const re = /[.!?;:\n]\s/g; let m, cut = -1;
+      buf += t; const re = /[.!?\n]\s/g; let m, cut = -1;   // TTS-PAUSE-v1: si taglia solo a fine frase; virgole, due punti e ; restano dentro (pausa breve di Piper)
       while ((m = re.exec(buf))) cut = m.index + 1;
       if (cut >= (first ? 20 : 160)){ enqueueSpeech(buf.slice(0, cut)); buf = buf.slice(cut); first = false; }
     },
@@ -1029,8 +1029,70 @@ async function listenWhisper(mode){
   mr.start(250);
 }
 let pendingDictation = null, dictation = null;
+// DICT-SERVER-v1: dettatura con Whisper sul gateway. Registrazione continua tagliata in blocchi alle pause (max 25 s),
+// ogni blocco si trascrive mentre si continua a parlare; "fine dettatura" o un tocco sulla rete chiudono e salvano la nota.
+const DICT_END = /^(.*?)\b(?:fine|stop|basta|chiudi)\s+(?:la\s+)?dettatura\b/i;
+async function startDictationServer(opts){
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }); }catch(e){ toast('Microfono: ' + e.message); return; }
+  stopRec(); stopSpeaking();
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
+  const src = actx.createMediaStreamSource(stream), an2 = actx.createAnalyser(); an2.fftSize = 512; src.connect(an2);
+  const buf = new Uint8Array(an2.fftSize);
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+  const d = dictation = { title:opts.title || 'Dettatura ' + new Date().toLocaleString('it-IT', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }),
+                          text:'', stop:false, server:true, chain:Promise.resolve(), interim:'' };
+  d.bubble = addMsg('user', '');
+  document.body.className = 's-listening'; NN.setState('listening'); $('#status').textContent = 'Dettatura: di\' "fine dettatura" o tocca la rete per chiudere'; chime(2);
+  const t0 = Date.now(), show = () => { d.bubble.textContent = (d.text + (d.interim ? ' ' + d.interim : '')).trim() || '…'; scrollLog(); };
+  show();
+  const send = blob => {   // trascrizioni in ordine, una dietro l'altra
+    d.chain = d.chain.then(async () => {
+      if (blob.size < 2000 || d.closed) return;   // dopo "fine dettatura" non si aggiunge altro
+      d.interim = '(trascrivo…)'; show();
+      try{
+        const u = sttHook(), r = await fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob });
+        const j = await r.json(); if (!r.ok) throw new Error(j.errore || 'HTTP ' + r.status);
+        let t = (j.text || '').trim();
+        const m = t.match(DICT_END); if (m){ t = m[1].trim(); d.stop = true; d.closed = true; }
+        if (t) d.text += (d.text ? ' ' : '') + t;
+      }catch(e){ toast('Dettatura: ' + e.message); }
+      d.interim = ''; show();
+    });
+  };
+  let mr = null, segStart = 0, spoke = false, silence = 0;
+  const startSeg = () => {
+    const chunks = []; mr = new MediaRecorder(stream, mime ? { mimeType:mime } : undefined); segStart = Date.now(); spoke = false; silence = 0;
+    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    const me = mr;
+    me.onstop = () => { if (spoke) send(new Blob(chunks, { type:me.mimeType || 'audio/webm' })); if (!d.stop && dictation === d) startSeg(); else end(); };
+    me.start(250);
+  };
+  let ended = false;
+  const end = async () => {
+    if (ended) return; ended = true; clearInterval(timer);
+    stream.getTracks().forEach(t => t.stop()); try{ src.disconnect(); }catch(e){}
+    d.interim = d.text ? '' : '(trascrivo…)'; show();
+    await d.chain; if (dictation === d) finishDictation();
+  };
+  d.stopNow = () => { d.stop = true; if (mr && mr.state !== 'inactive') mr.stop(); else end(); };
+  const timer = setInterval(() => {
+    if (!mr || mr.state === 'inactive') return;
+    an2.getByteTimeDomainData(buf); let sum = 0;
+    for (const v of buf){ const x = (v - 128) / 128; sum += x * x; }
+    const rms = Math.sqrt(sum / buf.length);
+    if (rms > 0.02){ spoke = true; silence = 0; NN.pulse(); } else if (spoke) silence += 100;
+    const len = Date.now() - segStart;
+    if (d.stop || (spoke && silence > 1200 && len > 3000) || len > 25000 || Date.now() - t0 > 600000){
+      if (Date.now() - t0 > 600000) d.stop = true;   // al massimo 10 minuti
+      mr.stop();
+    }
+  }, 100);
+  startSeg();
+}
 function startDictation(opts){
   pendingDictation = null;
+  if (useServerStt() && navigator.mediaDevices && window.MediaRecorder){ startDictationServer(opts); return; }   // DICT-SERVER-v1
   if (!SR){ toast('Dettatura non disponibile'); return; }
   stopRec(); stopSpeaking();
   dictation = { title:opts.title || 'Dettatura ' + new Date().toLocaleString('it-IT', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }), text:'', stop:false };
@@ -1066,7 +1128,7 @@ function finishDictation(){
   const msg = `Nota "${d.title}" salvata: ${text.split(' ').length} parole.`; addMsg('bot', msg); logT('bot', msg); chime(1);
   setState('idle'); speak(msg).then(() => { if (!busy) resumeWake(); });
 }
-function stopDictation(){ if (!dictation) return; dictation.stop = true; if (rec && recMode === 'dictation') rec.stop(); else finishDictation(); }
+function stopDictation(){ if (!dictation) return; if (dictation.server){ dictation.stopNow(); return; } dictation.stop = true; if (rec && recMode === 'dictation') rec.stop(); else finishDictation(); }
 let wakeLock = null;
 async function keepAwake(on){
   try{
