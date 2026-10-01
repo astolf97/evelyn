@@ -915,6 +915,9 @@ function listenCommand(){   // STT-FIX-v2
     if (text) handleUser(text, pending.splice(0), { voice:true });
     else {
       setState('idle');
+      if (sttHook() && !/negato|non consentito/.test(failed)){   // STT-ROBUST-v1: Chrome non ha trascritto: Whisper sul gateway, e da ora su questo dispositivo
+        store.set('sttAuto', 'server'); toast('Il riconoscimento di Chrome non trascrive: passo a Whisper sul gateway'); listenWhisper('server'); renderPending(); return;
+      }
       if (!heard && !failed && settings.oaiKey){ listenWhisper(); renderPending(); return; }   // il riconoscimento del browser non ha dato segni: prova Whisper
       toast(failed || 'Non ho sentito niente, riprova');
       resumeWake();
@@ -923,7 +926,7 @@ function listenCommand(){   // STT-FIX-v2
   };
   const go = () => {
     if (rec !== r0) return;
-    try{ r0.start(); setState('listening'); live('Ti ascolto…'); t0 = Date.now(); }
+    try{ r0.start(); setState('listening'); live('Ti ascolto… (Chrome)'); t0 = Date.now(); }
     catch(e){ rec = null; recMode = null; setState('idle'); toast('Microfono occupato, tocca di nuovo'); return; }
     // controllo di sicurezza: si chiude con stop() (che consegna il testo già riconosciuto), mai con abort()
     guard = setTimeout(function check(){
@@ -983,7 +986,7 @@ function startBargeIn(){
 // EVELYN-STT-SERVER-v1: trascrizione con Whisper sul gateway (/webhooks/evelyn/stt, stessa chiave dei webhook del gateway).
 // È il motore predefinito quando il gateway è collegato: il riconoscimento di Chrome su alcuni telefoni ascolta ma non trascrive.
 const sttHook = () => { const g = hooks().find(x => /\/webhooks\/evelyn\/[a-z_]+/.test(x.url)); return g ? g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/stt') : null; };
-const useServerStt = () => !!sttHook() && (settings.stt === 'server' || (settings.stt === 'google' && !settings.sttChosen));
+const useServerStt = () => !!sttHook() && (settings.stt === 'server' || (settings.stt === 'google' && (!settings.sttChosen || store.get('sttAuto') === 'server')));
 const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : useServerStt() ? listenWhisper('server') : listenCommand();
 let wrec = null;
 async function listenWhisper(mode){
@@ -1000,17 +1003,18 @@ async function listenWhisper(mode){
   let spoke = false, silence = 0, timer; const t0 = Date.now();
   const stopNow = () => { clearInterval(timer); if (mr.state !== 'inactive') mr.stop(); };
   wrec = { stopNow };
-  setState('listening'); $('#live').textContent = 'Parla, tocca di nuovo la rete quando hai finito';
+  setState('listening'); $('#live').textContent = 'Ti ascolto… (' + (mode === 'server' ? 'Whisper' : 'Whisper OpenAI') + ') · tocca la rete quando hai finito';
   timer = setInterval(() => {
     an2.getByteTimeDomainData(buf); let sum = 0;
     for (const v of buf){ const x = (v - 128) / 128; sum += x * x; }
     const rms = Math.sqrt(sum / buf.length);
-    if (rms > 0.02){ spoke = true; silence = 0; NN.pulse(); } else if (spoke) silence += 100;
-    if ((spoke && silence > 1400) || Date.now() - t0 > 30000 || (!spoke && Date.now() - t0 > 7000)) stopNow();
+    if (rms > 0.012){ spoke = true; silence = 0; NN.pulse(); } else if (spoke) silence += 100;   // STT-ROBUST-v1: soglia più bassa per i microfoni dei telefoni
+    if ((spoke && silence > 1400) || Date.now() - t0 > 30000 || (!spoke && Date.now() - t0 > 8000)) stopNow();
   }, 100);
   mr.onstop = async () => {
     wrec = null; stream.getTracks().forEach(t => t.stop()); try{ src.disconnect(); }catch(e){}
-    if (!spoke){ $('#live').textContent = ''; setState('idle'); resumeWake(); return; }
+    const bytes = chunks.reduce((n, c) => n + c.size, 0);
+    if (!spoke && bytes < 4000){ $('#live').textContent = ''; toast('Non ho sentito niente, riprova'); setState('idle'); resumeWake(); return; }   // STT-ROBUST-v1: se c'è audio decide Whisper
     setState('thinking'); $('#live').textContent = 'Trascrivo…';
     try{
       const blob = new Blob(chunks, { type:mr.mimeType || 'audio/webm' }), fd = new FormData();
@@ -1022,7 +1026,7 @@ async function listenWhisper(mode){
       if (u && !r.ok) throw new Error(d.errore || 'HTTP ' + r.status);
       if (!r.ok) throw new Error((d.error && d.error.message) || 'HTTP ' + r.status);
       const text = (d.text || '').trim();
-      if (text) handleUser(text, pending.splice(0), { voice:true }); else { setState('idle'); resumeWake(); }
+      if (text) handleUser(text, pending.splice(0), { voice:true }); else { toast('Non ho sentito niente, riprova'); setState('idle'); resumeWake(); }
       renderPending();
     }catch(e){ $('#live').textContent = ''; toast((mode === 'server' ? 'Trascrizione sul gateway: ' : 'Whisper: ') + e.message); setState('idle'); resumeWake(); }
   };
@@ -1853,7 +1857,7 @@ function renderData(){
   memory.forEach(m => um.appendChild(li(m.fact, () => { memory = memory.filter(x => x !== m); saveMem(); })));
 }
 function refreshData(){ if ($('#dlgData').open) renderData(); }
-const SECRETS = ['apiKey', 'haToken', 'ghToken', 'elKey', 'oaiKey', 'gistId'];
+const SECRETS = ['apiKey', 'haToken', 'ghToken', 'elKey', 'oaiKey', 'gistId', 'stt', 'sttChosen'];   // STT-ROBUST-v1: il motore di trascrizione è di ogni dispositivo (il PC non deve cambiarlo al telefono)
 const withoutSecrets = o => Object.fromEntries(Object.entries(o).filter(([k]) => !SECRETS.includes(k)));
 $('#dExport').onclick = () => {
   const keys = confirm('Includere nel backup anche chiavi e token (Anthropic, ElevenLabs, GitHub…)? Così il ripristino è completo, ma il file va tenuto al sicuro.');
