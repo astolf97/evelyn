@@ -951,6 +951,13 @@ function wavFromFloat(chunks, rate){
   for (let i = 0; i < out; i++){ const v = Math.max(-1, Math.min(1, all[Math.floor(i * ratio)] || 0)); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
   return new Blob([buf], { type:'audio/wav' });
 }
+let wakeNeedsTap = false;
+document.addEventListener('pointerdown', () => {   // WAKE-SERVER-v2: il tocco sblocca il motore audio
+  if (!wakeNeedsTap) return;
+  wakeNeedsTap = false;
+  if (actx && actx.state !== 'running') actx.resume().catch(() => {});
+  if (!rec && settings.wake && !busy) resumeWake();
+}, true);
 function startWakeServer(){
   if (!settings.wake || busy || rec || wakeBlocked || wrec || dictation) return;
   const stub = { onend:null, stopped:false, abort(){ this.stopped = true; cleanup(); }, stop(){ this.stopped = true; cleanup(); } };
@@ -968,9 +975,14 @@ function startWakeServer(){
     if (actx.state === 'suspended') actx.resume().catch(() => {});
     src = actx.createMediaStreamSource(stream); proc = actx.createScriptProcessor(4096, 1, 1);
     src.connect(proc); proc.connect(actx.destination);   // l'uscita resta muta: serve solo a far girare l'elaborazione
+    // WAKE-SERVER-v2: su Android, aperta l'app senza un tocco, il motore audio resta sospeso e il microfono non viene analizzato:
+    // lo si dice nella barra di stato e si riattiva al primo tocco sullo schermo
+    let ticks = 0;
+    setTimeout(() => { if (!stub.stopped && (actx.state !== 'running' || !ticks)){ wakeNeedsTap = true; $('#status').textContent = 'Tocca lo schermo per attivare l\'ascolto di "' + settings.name + '"'; } }, 2000);
     const rate = actx.sampleRate, pre = [], clip = []; let preLen = 0, talking = false, voiced = 0, silent = 0, clipLen = 0;
     proc.onaudioprocess = e => {
       if (stub.stopped) return;
+      if (!ticks++){ wakeNeedsTap = false; if (recMode === 'wake') $('#status').textContent = 'In ascolto: di\' "' + settings.name + '" (Whisper)'; }
       const d = new Float32Array(e.inputBuffer.getChannelData(0)), ms = d.length / rate * 1000;
       let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
       const loud = Math.sqrt(sum / d.length) > 0.015;
