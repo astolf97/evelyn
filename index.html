@@ -857,52 +857,53 @@ function stopRec(){ if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} re
 const SR_ERR = { 'not-allowed':'permesso del microfono negato', 'service-not-allowed':'riconoscimento vocale non consentito dal browser',
   'audio-capture':'il microfono è usato da un\'altra app o non è disponibile', 'network':'serve la connessione a internet per il riconoscimento vocale',
   'language-not-supported':'lingua non supportata dal riconoscimento vocale', 'bad-grammar':'errore del riconoscimento vocale' };
-function listenCommand(){
+function listenCommand(){   // STT-FIX-v2
   if (!SR){ toast('Il riconoscimento vocale richiede Chrome o Edge. Puoi comunque scrivere.'); return; }
   stopRec(); stopSpeaking();
   const r0 = new SR(); r0.lang = settings.lang || 'it-IT'; r0.interimResults = true; r0.continuous = false;
   rec = r0; recMode = 'command';
-  let final = '', gotAudio = false, gotText = false, failed = '', guard = null;
+  // final = frasi definitive; interim = ultima frase provvisoria (su Android a volte non diventa mai "definitiva": la si usa lo stesso)
+  let final = '', interim = '', heard = false, failed = '', guard = null, t0 = 0;
   const live = t => { $('#live').textContent = t; };
-  r0.onaudiostart = () => { gotAudio = true; if (!gotText) live('Ti ascolto…'); };
-  r0.onspeechstart = () => { gotAudio = true; NN.pulse(); };
+  const sign = () => { heard = true; };
+  r0.onaudiostart = sign; r0.onsoundstart = sign; r0.onspeechstart = () => { heard = true; NN.pulse(); };
   r0.onresult = e => {
-    let interim = ''; gotText = true;
+    heard = true; interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript; }
     live(final + interim); NN.pulse();
   };
   r0.onerror = e => {
     if (e.error === 'aborted') return;
-    if (e.error === 'no-speech'){ failed = 'Non ho sentito niente: parla subito dopo il suono'; return; }
+    if (e.error === 'no-speech'){ failed = 'Non ho sentito niente, riprova'; return; }
     failed = 'Microfono: ' + (SR_ERR[e.error] || e.error);
   };
   r0.onend = () => {
     clearTimeout(guard);
     if (rec === r0){ rec = null; recMode = null; }
     live('');
-    if (final.trim()) handleUser(final.trim(), pending.splice(0), { voice:true });
+    const text = (final.trim() || interim.trim());
+    if (text) handleUser(text, pending.splice(0), { voice:true });
     else {
       setState('idle');
-      if (failed === 'muto' && settings.oaiKey){ toast('Il riconoscimento del browser non risponde: uso Whisper'); listenWhisper(); renderPending(); return; }
-      if (failed === 'muto') toast('Il riconoscimento vocale non riceve audio: chiudi e riapri Evelyn, oppure imposta Whisper nelle impostazioni');
-      else if (failed) toast(failed);
+      if (!heard && !failed && settings.oaiKey){ listenWhisper(); renderPending(); return; }   // il riconoscimento del browser non ha dato segni: prova Whisper
+      toast(failed || 'Non ho sentito niente, riprova');
       resumeWake();
     }
     renderPending();
   };
   const go = () => {
-    if (rec !== r0) return;   // nel frattempo è partito altro
-    try{ r0.start(); setState('listening'); live('…'); }
+    if (rec !== r0) return;
+    try{ r0.start(); setState('listening'); live('Ti ascolto…'); t0 = Date.now(); }
     catch(e){ rec = null; recMode = null; setState('idle'); toast('Microfono occupato, tocca di nuovo'); return; }
-    guard = setTimeout(function check(){   // controllo di sicurezza
+    // controllo di sicurezza: si chiude con stop() (che consegna il testo già riconosciuto), mai con abort()
+    guard = setTimeout(function check(){
       if (rec !== r0) return;
-      if (!gotAudio){ failed = 'muto'; try{ r0.abort(); }catch(e){} return; }
-      if (!gotText && Date.now() - t0 > 12000){ failed = 'Non ho capito, riprova'; try{ r0.stop(); }catch(e){} return; }
+      const el = Date.now() - t0;
+      if ((!heard && el > 10000) || el > 20000){ try{ r0.stop(); }catch(e){} return; }
       guard = setTimeout(check, 1000);
-    }, 6000);
+    }, 1000);
   };
-  const t0 = Date.now() + Math.max(0, 450 - (Date.now() - recStoppedAt));
-  setTimeout(go, Math.max(0, 450 - (Date.now() - recStoppedAt)));   // il riconoscimento precedente deve chiudersi davvero
+  setTimeout(go, Math.max(0, 450 - (Date.now() - recStoppedAt)));   // STT-FIX-v1: il riconoscimento precedente deve chiudersi davvero
 }
 let wakeBlocked = false;
 function startWake(){
