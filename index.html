@@ -307,7 +307,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
       </div>
       <div class="card">
         <h3>Riconoscimento vocale</h3>
-        <label>Motore<select id="sStt"><option value="google">Google (integrato in Chrome ed Edge, gratis)</option><option value="whisper">Whisper di OpenAI (più preciso con termini tecnici)</option></select></label>
+        <label>Motore<select id="sStt"><option value="google">Google (integrato in Chrome ed Edge, gratis)</option><option value="whisper">Whisper di OpenAI (più preciso con termini tecnici)</option><option value="server">Whisper sul gateway (gratis, funziona anche quando Chrome non trascrive)</option></select></label>
         <label>OpenAI, API key (solo per Whisper)<input id="sOaiKey" type="password" autocomplete="off"></label>
       </div>
     </section>
@@ -723,7 +723,34 @@ async function piperFetch(item){
     catch(e){ if (e.load){ piperNoWorker = true; console.warn('Piper nel worker non disponibile, uso il filo principale:', e.message); } else throw e; }
   }
   if (!wav) wav = await (await piperLib()).predict({ text:item.text, voiceId:piperVoice() });
+  try{ wav = await trimWav(wav); }catch(e){}   // TTS-FLOW-v1
   return URL.createObjectURL(wav);
+}
+// TTS-FLOW-v1: Piper mette silenzio in testa e in coda a ogni audio: si lascia solo un respiro (60 ms prima, 120 ms dopo)
+async function trimWav(blob){
+  const buf = await blob.arrayBuffer(), dv = new DataView(buf);
+  if (dv.getUint32(0, false) !== 0x52494646) return blob;   // non è RIFF
+  let off = 12, fmt = null, data = null;
+  while (off + 8 <= dv.byteLength){
+    const id = dv.getUint32(off, false), size = dv.getUint32(off + 4, true);
+    if (id === 0x666d7420) fmt = { ch:dv.getUint16(off + 10, true), rate:dv.getUint32(off + 12, true), bits:dv.getUint16(off + 22, true) };
+    if (id === 0x64617461){ data = { start:off + 8, size:Math.min(size, dv.byteLength - off - 8) }; break; }
+    off += 8 + size + (size & 1);
+  }
+  if (!fmt || !data || fmt.bits !== 16) return blob;
+  const fr = fmt.ch * 2, n = Math.floor(data.size / fr), thr = 500;
+  const loud = i => Math.abs(dv.getInt16(data.start + i * fr, true)) > thr;
+  let a = 0, b = n - 1;
+  while (a < n && !loud(a)) a++;
+  while (b > a && !loud(b)) b--;
+  if (a >= b) return blob;
+  a = Math.max(0, a - Math.round(fmt.rate * .06)); b = Math.min(n - 1, b + Math.round(fmt.rate * .12));
+  const pcm = new Uint8Array(buf, data.start + a * fr, (b - a + 1) * fr);
+  const head = new ArrayBuffer(44), h = new DataView(head), w = (o, t) => [...t].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); h.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true);
+  h.setUint16(22, fmt.ch, true); h.setUint32(24, fmt.rate, true); h.setUint32(28, fmt.rate * fr, true); h.setUint16(32, fr, true); h.setUint16(34, 16, true);
+  w(36, 'data'); h.setUint32(40, pcm.length, true);
+  return new Blob([head, pcm], { type:'audio/wav' });
 }
 function piperFail(e){
   if (!tts.piperWarned){ toast('Voce Piper non disponibile, uso quella del dispositivo: ' + (e && e.message || e)); tts.piperWarned = true; }
@@ -739,11 +766,14 @@ function stopSpeaking(mute){
   tts.waiters.splice(0).forEach(f => f());
   if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
 }
+// TTS-FLOW-v1: parole in maiuscolo che vanno lette come parole (Paola le compita: "SIM" diventava "esse i emme")
+const SAY_AS = [[/\bSIM\b/g, 'sim'], [/\bSIMs\b/g, 'sim'], [/\bPIN\b/g, 'pin'], [/\bOK\b/g, 'okay'], [/\bWiFi\b/gi, 'uaifai']];
+const sayAs = t => SAY_AS.reduce((x, [re, w]) => x.replace(re, w), t);
 function splitSpeech(text){
-  const clean = cleanText(text).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
+  const clean = sayAs(cleanText(text)).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
   const sentences = clean.match(/[^.!?;:\n]+[.!?;:\n]*\s*/g) || [clean];
   const parts = []; let buf = '';
-  for (const s of sentences){ if ((buf + s).length > 220 && buf){ parts.push(buf); buf = ''; } buf += s; }
+  for (const s of sentences){ if ((buf + s).length > 320 && buf){ parts.push(buf); buf = ''; } buf += s; }
   if (buf.trim()) parts.push(buf);
   return parts;
 }
@@ -754,12 +784,12 @@ function enqueueSpeech(text, opts = {}){
 }
 function speak(text, opts = {}){ enqueueSpeech(text, opts); return ttsWait(); }
 function makeStreamSpeaker(){
-  let buf = '';
+  let buf = '', first = true;   // TTS-FLOW-v1: il primo pezzo parte subito, i successivi più lunghi = meno stacchi tra un audio e l'altro
   return {
     push(t){
       buf += t; const re = /[.!?;:\n]\s/g; let m, cut = -1;
       while ((m = re.exec(buf))) cut = m.index + 1;
-      if (cut >= 20){ enqueueSpeech(buf.slice(0, cut)); buf = buf.slice(cut); }
+      if (cut >= (first ? 20 : 160)){ enqueueSpeech(buf.slice(0, cut)); buf = buf.slice(cut); first = false; }
     },
     flush(){ if (buf.trim()) enqueueSpeech(buf); buf = ''; }
   };
@@ -837,7 +867,7 @@ async function pump(){
       try{ const url = await item.audio; played = token === tts.token ? await playUrl(url) : true; }catch(e){ elFail(e); }
     } else if (usePiper()){
       if (!item.audio) item.audio = piperFetch(item);
-      const nx = tts.q[0]; if (nx && !nx.audio){ nx.audio = piperFetch(nx); nx.audio.catch(() => {}); }
+      for (const nx of tts.q.slice(0, 2)) if (!nx.audio){ nx.audio = piperFetch(nx); nx.audio.catch(() => {}); }   // TTS-FLOW-v1: due pezzi pronti
       try{ const url = await item.audio; played = token === tts.token ? await playUrl(url, settings.rate) : true; }catch(e){ piperFail(e); }
     }
     if (!played && token === tts.token) await speakBrowser(item);
@@ -950,9 +980,13 @@ function startBargeIn(){
   rec.onend = () => { if (recMode === 'barge'){ rec = null; recMode = null; if (tts.speaking) setTimeout(startBargeIn, 200); } };
   try{ rec.start(); }catch(e){ rec = null; recMode = null; }
 }
-const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : listenCommand();
+// EVELYN-STT-SERVER-v1: trascrizione con Whisper sul gateway (/webhooks/evelyn/stt, stessa chiave dei webhook del gateway).
+// È il motore predefinito quando il gateway è collegato: il riconoscimento di Chrome su alcuni telefoni ascolta ma non trascrive.
+const sttHook = () => { const g = hooks().find(x => /\/webhooks\/evelyn\/[a-z_]+/.test(x.url)); return g ? g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/stt') : null; };
+const useServerStt = () => !!sttHook() && (settings.stt === 'server' || (settings.stt === 'google' && !settings.sttChosen));
+const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : useServerStt() ? listenWhisper('server') : listenCommand();
 let wrec = null;
-async function listenWhisper(){
+async function listenWhisper(mode){
   if (wrec){ wrec.stopNow(); return; }
   stopRec(); stopSpeaking();
   let stream;
@@ -981,13 +1015,16 @@ async function listenWhisper(){
     try{
       const blob = new Blob(chunks, { type:mr.mimeType || 'audio/webm' }), fd = new FormData();
       fd.append('file', blob, 'audio.' + (blob.type.includes('mp4') ? 'mp4' : 'webm')); fd.append('model', 'whisper-1'); fd.append('language', settings.lang.slice(0, 2)); fd.append('response_format', 'json');
-      const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method:'POST', headers:{ Authorization:'Bearer ' + settings.oaiKey }, body:fd });
+      const u = mode === 'server' ? sttHook() : null;
+      const r = u ? await fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob })
+                  : await fetch('https://api.openai.com/v1/audio/transcriptions', { method:'POST', headers:{ Authorization:'Bearer ' + settings.oaiKey }, body:fd });
       const d = await r.json(); $('#live').textContent = '';
+      if (u && !r.ok) throw new Error(d.errore || 'HTTP ' + r.status);
       if (!r.ok) throw new Error((d.error && d.error.message) || 'HTTP ' + r.status);
       const text = (d.text || '').trim();
       if (text) handleUser(text, pending.splice(0), { voice:true }); else { setState('idle'); resumeWake(); }
       renderPending();
-    }catch(e){ $('#live').textContent = ''; toast('Whisper: ' + e.message); setState('idle'); resumeWake(); }
+    }catch(e){ $('#live').textContent = ''; toast((mode === 'server' ? 'Trascrizione sul gateway: ' : 'Whisper: ') + e.message); setState('idle'); resumeWake(); }
   };
   mr.start(250);
 }
@@ -2024,7 +2061,7 @@ function openSettings(){
   $('#sSpeak').checked = settings.speak; $('#sWake').checked = settings.wake; $('#sWeb').checked = settings.web;
   $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
   $('#sFollow').checked = settings.followUp; $('#sEngine').value = settings.tts; $('#sPiperVoice').value = settings.piperVoice || DEFAULTS.piperVoice; $('#sElKey').value = settings.elKey; $('#sElVoice').value = settings.elVoice; $('#sElModel').value = settings.elModel; $('#sGh').value = settings.ghToken;
-  $('#sStt').value = settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
+  $('#sStt').value = useServerStt() ? 'server' : settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
   $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia; 
   const mh = $('#sMonitorHook'); mh.innerHTML = ''; const hs = hooks();
   if (!hs.length){ const o = document.createElement('option'); o.value = ''; o.textContent = 'nessun webhook configurato'; mh.appendChild(o); }
@@ -2057,7 +2094,7 @@ $('#dlgSettings').addEventListener('close', async () => {
   const newGh = $('#sGh').value.trim();
   if (newGh !== settings.ghToken){ settings.ghToken = newGh; settings.gistId = ''; meta.synced = false; store.set('meta', meta); }
   const newLang = $('#sLang').value; if (newLang !== settings.lang) settings.voiceURI = '';
-  Object.assign(settings, { stt:$('#sStt').value, oaiKey:$('#sOaiKey').value.trim(), bargeIn:$('#sBarge').checked, monitor:$('#sMonitor').checked, monitorMin:Math.max(1, parseInt($('#sMonitorMin').value) || 5), monitorHook:$('#sMonitorHook').value, plancia:$('#sPlancia').checked, persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, piperVoice:$('#sPiperVoice').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
+  Object.assign(settings, { sttChosen:settings.sttChosen || $('#sStt').value !== settings.stt, stt:$('#sStt').value, oaiKey:$('#sOaiKey').value.trim(), bargeIn:$('#sBarge').checked, monitor:$('#sMonitor').checked, monitorMin:Math.max(1, parseInt($('#sMonitorMin').value) || 5), monitorHook:$('#sMonitorHook').value, plancia:$('#sPlancia').checked, persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, piperVoice:$('#sPiperVoice').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
   tts.elDisabled = false; tts.elWarned = false;
   saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow(); if (unlocked){ startMonitor(); startPlancia(); }
 });
