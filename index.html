@@ -849,24 +849,60 @@ async function pump(){
 /* ================= Voce: riconoscimento ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, recMode = null, pendingWake = null;
-function stopRec(){ if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} rec = null; recMode = null; } }
+// STT-FIX-v1: su Android un riconoscimento avviato subito dopo averne interrotto un altro (ascolto della parola, barge-in,
+// seguito della conversazione) resta "in ascolto" senza mai ricevere audio né testo. Si aspetta che il precedente sia chiuso,
+// si mostra quando arriva audio, e un controllo di sicurezza chiude l'ascolto muto (o passa a Whisper se c'è la chiave).
+let recStoppedAt = 0;
+function stopRec(){ if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} rec = null; recMode = null; recStoppedAt = Date.now(); } }
+const SR_ERR = { 'not-allowed':'permesso del microfono negato', 'service-not-allowed':'riconoscimento vocale non consentito dal browser',
+  'audio-capture':'il microfono è usato da un\'altra app o non è disponibile', 'network':'serve la connessione a internet per il riconoscimento vocale',
+  'language-not-supported':'lingua non supportata dal riconoscimento vocale', 'bad-grammar':'errore del riconoscimento vocale' };
 function listenCommand(){
   if (!SR){ toast('Il riconoscimento vocale richiede Chrome o Edge. Puoi comunque scrivere.'); return; }
   stopRec(); stopSpeaking();
-  rec = new SR(); rec.lang = settings.lang; rec.interimResults = true; rec.continuous = false; recMode = 'command';
-  let final = '';
-  rec.onresult = e => {
-    let interim = '';
+  const r0 = new SR(); r0.lang = settings.lang || 'it-IT'; r0.interimResults = true; r0.continuous = false;
+  rec = r0; recMode = 'command';
+  let final = '', gotAudio = false, gotText = false, failed = '', guard = null;
+  const live = t => { $('#live').textContent = t; };
+  r0.onaudiostart = () => { gotAudio = true; if (!gotText) live('Ti ascolto…'); };
+  r0.onspeechstart = () => { gotAudio = true; NN.pulse(); };
+  r0.onresult = e => {
+    let interim = ''; gotText = true;
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript; }
-    $('#live').textContent = final + interim; NN.pulse();
+    live(final + interim); NN.pulse();
   };
-  rec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Microfono: ' + e.error); };
-  rec.onend = () => {
-    rec = null; recMode = null; $('#live').textContent = '';
-    if (final.trim()) handleUser(final.trim(), pending.splice(0), { voice:true }); else { setState('idle'); resumeWake(); }
+  r0.onerror = e => {
+    if (e.error === 'aborted') return;
+    if (e.error === 'no-speech'){ failed = 'Non ho sentito niente: parla subito dopo il suono'; return; }
+    failed = 'Microfono: ' + (SR_ERR[e.error] || e.error);
+  };
+  r0.onend = () => {
+    clearTimeout(guard);
+    if (rec === r0){ rec = null; recMode = null; }
+    live('');
+    if (final.trim()) handleUser(final.trim(), pending.splice(0), { voice:true });
+    else {
+      setState('idle');
+      if (failed === 'muto' && settings.oaiKey){ toast('Il riconoscimento del browser non risponde: uso Whisper'); listenWhisper(); renderPending(); return; }
+      if (failed === 'muto') toast('Il riconoscimento vocale non riceve audio: chiudi e riapri Evelyn, oppure imposta Whisper nelle impostazioni');
+      else if (failed) toast(failed);
+      resumeWake();
+    }
     renderPending();
   };
-  try{ rec.start(); setState('listening'); }catch(e){ rec = null; recMode = null; }
+  const go = () => {
+    if (rec !== r0) return;   // nel frattempo è partito altro
+    try{ r0.start(); setState('listening'); live('…'); }
+    catch(e){ rec = null; recMode = null; setState('idle'); toast('Microfono occupato, tocca di nuovo'); return; }
+    guard = setTimeout(function check(){   // controllo di sicurezza
+      if (rec !== r0) return;
+      if (!gotAudio){ failed = 'muto'; try{ r0.abort(); }catch(e){} return; }
+      if (!gotText && Date.now() - t0 > 12000){ failed = 'Non ho capito, riprova'; try{ r0.stop(); }catch(e){} return; }
+      guard = setTimeout(check, 1000);
+    }, 6000);
+  };
+  const t0 = Date.now() + Math.max(0, 450 - (Date.now() - recStoppedAt));
+  setTimeout(go, Math.max(0, 450 - (Date.now() - recStoppedAt)));   // il riconoscimento precedente deve chiudersi davvero
 }
 let wakeBlocked = false;
 function startWake(){
@@ -2053,7 +2089,7 @@ $('#file').onchange = async e => {
 function orbAction(){
   if (dictation){ stopDictation(); return; }
   if (wrec){ wrec.stopNow(); return; }
-  if (recMode === 'command'){ rec.stop(); return; }
+  if (recMode === 'command'){ try{ rec.stop(); }catch(e){ stopRec(); setState('idle'); } return; }   // STT-FIX-v1: anche durante l'attesa prima dell'avvio
   if (document.body.classList.contains('s-speaking')){ stopSpeaking(true); return; }
   if (busy) return;
   listenAny();
