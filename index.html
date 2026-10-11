@@ -800,7 +800,10 @@ function stopSpeaking(mute){
   if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
 }
 // TTS-FLOW-v1: parole in maiuscolo che vanno lette come parole (Paola le compita: "SIM" diventava "esse i emme")
-const SAY_AS = [[/\bSIM\b/g, 'sim'], [/\bSIMs\b/g, 'sim'], [/\bPIN\b/g, 'pin'], [/\bOK\b/g, 'okay'], [/\bWiFi\b/gi, 'uaifai']];
+const SAY_AS = [[/\bSIM\b/g, 'sim'], [/\bSIMs\b/g, 'sim'], [/\bPIN\b/g, 'pin'], [/\bOK\b/g, 'okay'], [/\bWiFi\b/gi, 'uaifai'],
+  [/(\d)\.(\d{1,2})(?!\d|\.\d)/g, '$1,$2'],                 // JARVIS-v1: 0.05 → 0,05 (decimali all'italiana; 12.340 resta migliaia)
+  [/\bDLR\b/g, 'di elle erre'], [/\bSMPP\b/g, 'esse emme pi pi'], [/\bUTC\b/g, 'u ti ci'], [/\bCRM\b/g, 'ci erre emme'], [/\bHLR\b/g, 'acca elle erre'],
+  [/\bduck-(\d+)/gi, 'dac $1']];
 const sayAs = t => SAY_AS.reduce((x, [re, w]) => x.replace(re, w), t);
 function splitSpeech(text, firstMax = 320){
   const clean = sayAs(cleanText(text)).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
@@ -2384,7 +2387,10 @@ async function listenServer(opts = {}){
       if (partBusy) return; partBusy = true;
       sttSend(mk(), 'part').then(j => { if (earTurn === me && j.text) live(j.text.trim() + ' …'); }).catch(() => {}).finally(() => { partBusy = false; });
     } : null,
-    onEarly:(wav, mark) => { early = { mark, p:sttSend(wav).catch(e => ({ __err:e })) }; } });
+    onEarly:(wav, mark) => {   // una sola richiesta anticipata alla volta: il gateway ne trascrive una per volta e la finale non deve fare la coda
+      if (early && !early.done) return;
+      const e = { mark, done:false }; e.p = sttSend(wav).catch(err => ({ __err:err })).then(j => { e.done = true; return j; }); early = e;
+    } });
   if (earTurn === me) earTurn = null;
   meter(0); Ear.idle();
   if (!res || res.aborted || res.error){
@@ -2513,7 +2519,7 @@ function localIntent(text, opts){
   addMsg('user', text); logT('user', text);
   if (reply !== last){ addMsg('bot', reply); logT('bot', reply); }
   if (LAT.cur){ LAT.cur.shown = true; }
-  speak(reply, { force:true }).then(() => { if (!tts.speaking && !busy) setState('idle'); if (opts.voice && settings.followUp && !tts.mutedTurn) followUp(); else resumeWake(); });
+  speak(reply, { force:reply === last }).then(() => { if (!tts.speaking && !busy) setState('idle'); if (opts.voice && settings.followUp && !tts.mutedTurn) followUp(); else resumeWake(); });
   return true;
 }
 function answerFast(text, d, opts = {}){
