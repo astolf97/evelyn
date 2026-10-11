@@ -321,6 +321,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
         <label class="check"><input id="sFollow" type="checkbox"> Conversazione continua: dopo aver risposto resta in ascolto per la tua replica</label>
         <label class="check"><input id="sBarge" type="checkbox"> Interruzione a voce: se parli mentre risponde, si ferma e ti ascolta</label>
         <label><span>Fine della frase dopo <b id="sEndMsVal" style="color:var(--text);font-weight:500"></b> di silenzio</span><input id="sEndMs" type="range" min="400" max="1500" step="50"></label>
+        <label class="check"><input id="sLive" type="checkbox"> Testo dal vivo mentre parli (frasi lunghe; un po' più di lavoro per il gateway)</label>
         <label>Sensibilità dell'interruzione<select id="sBargeRatio"><option value="12">Bassa: solo voce forte (vivavoce rumoroso)</option><option value="8">Media</option><option value="5">Alta: basta parlare piano (con cuffie)</option></select></label>
         <p class="hint">Con la trascrizione sul gateway l'ascolto si chiude da solo quando smetti di parlare: più corto = risposta più rapida, ma una pausa lunga a metà frase la taglia. Un tocco sulla rete mentre ascolta invia subito.</p>
       </div>
@@ -430,7 +431,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
 };
-const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false, endMs:700, fastPath:true, briefing:true, showTimes:true, jbar:true, bargeRatio:8 };   // JARVIS-v1
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false, endMs:700, fastPath:true, briefing:true, showTimes:true, jbar:true, bargeRatio:8, livePartial:true };   // JARVIS-v1
 const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
 const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
 const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -2305,6 +2306,7 @@ function hearUtterance(opts = {}){
   return new Promise(async resolve => {
     let st;
     try{ st = await Ear.open(); }catch(e){ resolve({ error:e }); return; }
+    let lastPart = performance.now();
     const pre = [], clip = []; let preLen = 0, talking = false, voicedMs = 0, silentMs = 0, waited = 0, total = 0, frames = 0, lastVoice = -1, early = false, run = 0, done = false;
     const t0 = performance.now();
     const finish = v => { if (done) return; done = true; Ear.sinks.delete(sink); if (opts.signal) opts.signal.onabort = null; resolve(v); };
@@ -2329,6 +2331,8 @@ function hearUtterance(opts = {}){
       if (loud){ voicedMs += ms; silentMs = 0; lastVoice = frames - 1; early = false; NN.pulse(); }
       else silentMs += ms;
       if (opts.onEarly && !early && silentMs >= earlyMs && voicedMs >= 350){ early = true; opts.onEarly(wav16k(clip, s.rate), lastVoice); }
+      // JARVIS-LIVE-v1: testo dal vivo solo per le frasi lunghe (le brevi arrivano già intere in mezzo secondo), mentre si parla
+      if (opts.onPartial && voicedMs >= 2200 && silentMs < 150 && performance.now() - lastPart > 1800){ lastPart = performance.now(); opts.onPartial(() => wav16k(clip, s.rate)); }
       if (silentMs >= endMs || total > maxMs){
         if (voicedMs < 260 && total <= maxMs){   // colpo di tosse, rumore: si torna ad aspettare
           talking = false; clip.length = 0; pre.length = 0; preLen = 0; voicedMs = 0; silentMs = 0; total = 0; frames = 0; lastVoice = -1; early = false; run = 0; return;
@@ -2341,7 +2345,7 @@ function hearUtterance(opts = {}){
 }
 async function sttSend(wav, mode = 'cmd'){
   const u = sttHook(); if (!u) throw new Error('gateway non configurato');
-  const q = (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2) + '&mode=' + mode + (settings.fastPath && mode !== 'dict' ? '&rapido=1' : '');
+  const q = (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2) + '&mode=' + mode + (settings.fastPath && mode !== 'dict' && mode !== 'part' ? '&rapido=1' : '');
   const r = await gwFetch(u + q, { method:'POST', headers:{ 'Content-Type':'audio/wav' }, body:wav });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.errore || j.error || 'HTTP ' + r.status);
@@ -2355,9 +2359,13 @@ async function listenServer(opts = {}){
   stopRec(); if (!opts.keepSpeech) stopSpeaking();
   const ctl = new AbortController(), me = earTurn = { ctl, ctrl:{} };
   setState('listening'); live(opts.prompt || 'Ti ascolto…');
-  let early = null;
+  let early = null, partBusy = false;
   const res = await hearUtterance({ signal:ctl.signal, ctrl:me.ctrl, preroll:opts.preroll, waitMs:opts.waitMs,
     onLevel:(l, loud) => meter(l, loud), onStart:() => live('…'),
+    onPartial:settings.livePartial ? mk => {
+      if (partBusy) return; partBusy = true;
+      sttSend(mk(), 'part').then(j => { if (earTurn === me && j.text) live(j.text.trim() + ' …'); }).catch(() => {}).finally(() => { partBusy = false; });
+    } : null,
     onEarly:(wav, mark) => { early = { mark, p:sttSend(wav).catch(e => ({ __err:e })) }; } });
   if (earTurn === me) earTurn = null;
   meter(0); Ear.idle();
@@ -2577,7 +2585,7 @@ function openSettings(){
   $('#sStt').value = useServerStt() ? 'server' : settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
   $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia;
   $('#sFast').checked = settings.fastPath; $('#sBrief').checked = settings.briefing; $('#sJbar').checked = settings.jbar; $('#sTimes').checked = settings.showTimes;   // JARVIS-v1
-  $('#sEndMs').value = settings.endMs; $('#sEndMsVal').textContent = secs(settings.endMs); $('#sBargeRatio').value = String(settings.bargeRatio || 8);
+  $('#sLive').checked = settings.livePartial; $('#sEndMs').value = settings.endMs; $('#sEndMsVal').textContent = secs(settings.endMs); $('#sBargeRatio').value = String(settings.bargeRatio || 8);
   $('#sLat').textContent = 'Tempi misurati: ' + latSummary() + '.' + (gwActs && gwActs.list ? ' Gateway: ' + (gwHas('rapido') ? 'risposte immediate attive' : 'versione senza risposte immediate (si usano le azioni di prima)') + '.' : '');
   const mh = $('#sMonitorHook'); mh.innerHTML = ''; const hs = hooks();
   if (!hs.length){ const o = document.createElement('option'); o.value = ''; o.textContent = 'nessun webhook configurato'; mh.appendChild(o); }
@@ -2612,7 +2620,7 @@ $('#dlgSettings').addEventListener('close', async () => {
   if (newGh !== settings.ghToken){ settings.ghToken = newGh; settings.gistId = ''; meta.synced = false; store.set('meta', meta); }
   const newLang = $('#sLang').value; if (newLang !== settings.lang) settings.voiceURI = '';
   Object.assign(settings, { fastPath:$('#sFast').checked, briefing:$('#sBrief').checked, jbar:$('#sJbar').checked, showTimes:$('#sTimes').checked,
-    endMs:Math.min(1500, Math.max(400, parseInt($('#sEndMs').value) || 700)), bargeRatio:parseInt($('#sBargeRatio').value) || 8 });   // JARVIS-v1
+    livePartial:$('#sLive').checked, endMs:Math.min(1500, Math.max(400, parseInt($('#sEndMs').value) || 700)), bargeRatio:parseInt($('#sBargeRatio').value) || 8 });   // JARVIS-v1
   Object.assign(settings, { sttChosen:settings.sttChosen || $('#sStt').value !== settings.stt, stt:$('#sStt').value, oaiKey:$('#sOaiKey').value.trim(), bargeIn:$('#sBarge').checked, monitor:$('#sMonitor').checked, monitorMin:Math.max(1, parseInt($('#sMonitorMin').value) || 5), monitorHook:$('#sMonitorHook').value, plancia:$('#sPlancia').checked, persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, piperVoice:$('#sPiperVoice').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
   tts.elDisabled = false; tts.elWarned = false;
   saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow(); if (unlocked){ startMonitor(); startPlancia(); gwCaps(true).then(renderJarvisBar); }
