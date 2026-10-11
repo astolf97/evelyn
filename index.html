@@ -2151,6 +2151,7 @@ function renderPlancia(s, c, o){
   if (s && s.senza_dlr_2h) add('Senza esito', String(s.senza_dlr_2h));
   if (!el.children.length) el.hidden = true;
 }
+let planciaPrimed = false;   // al primo giro dopo l'apertura non si annuncia niente (c'è già il quadro)
 async function planciaTick(){
   const el = $('#plancia'); const hs = hooks();
   const st = hs.find(x => /stato/i.test(x.name) && !/scheduler/i.test(x.name)), co = hs.find(x => /coda/i.test(x.name)), og = hs.find(x => /traffico|oggi/i.test(x.name));
@@ -2159,6 +2160,18 @@ async function planciaTick(){
     const [s, c, o, q] = await Promise.all([callHook(st), co ? callHook(co) : null, og ? callHook(og) : null, gwHas('situazione') ? gwAction('situazione', {}, 20000).catch(() => null) : null]);
     renderPlancia(s, c, o);
     const n = q && Array.isArray(q.voci) ? q.voci.filter(v => v.prio <= 1).length : null;   // JARVIS-BRIEF-v1
+    if (q && Array.isArray(q.voci)){   // JARVIS-PROACTIVE-v1: una cosa urgente nuova si dice subito (una volta), il resto resta nella plancia
+      const vid = v => v.id || String(v.testo).replace(/\d+/g, '#');
+      const urg = q.voci.filter(v => v.prio === 0), seen = store.get('urgSeen', []);
+      const nuove = urg.filter(v => !seen.includes(vid(v)));
+      store.set('urgSeen', urg.map(vid));
+      if (nuove.length && planciaPrimed){
+        const txt = 'Attenzione: ' + nuove.map(v => v.testo).join('; ') + '.';
+        chime(2); NN.burst(10); addMsg('bot alert', '⚠️ ' + txt); logT('bot alert', '⚠️ ' + txt); notify(txt);
+        if (!busy && !tts.speaking && !earTurn) speak(txt);
+      }
+      planciaPrimed = true;
+    }
     if (n !== null){
       const sp = document.createElement('span'), d = document.createElement('i'), b = document.createElement('b');
       d.className = 'pl-dot' + (n ? ' bad' : ''); b.textContent = n ? String(n) : 'niente';
