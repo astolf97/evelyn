@@ -323,6 +323,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
         <label><span>Fine della frase dopo <b id="sEndMsVal" style="color:var(--text);font-weight:500"></b> di silenzio</span><input id="sEndMs" type="range" min="400" max="1500" step="50"></label>
         <label class="check"><input id="sLive" type="checkbox"> Testo dal vivo mentre parli (frasi lunghe; un po' più di lavoro per il gateway)</label>
         <label>Sensibilità dell'interruzione<select id="sBargeRatio"><option value="12">Bassa: solo voce forte (vivavoce rumoroso)</option><option value="8">Media</option><option value="5">Alta: basta parlare piano (con cuffie)</option></select></label>
+        <div class="btns left"><button type="button" id="sJarvis">Modalità Jarvis: accendi tutto</button></div>
         <p class="hint">Con la trascrizione sul gateway l'ascolto si chiude da solo quando smetti di parlare: più corto = risposta più rapida, ma una pausa lunga a metà frase la taglia. Un tocco sulla rete mentre ascolta invia subito.</p>
       </div>
       <div class="card">
@@ -2634,6 +2635,11 @@ $('#dCloseX').onclick = () => $('#dlgData').close();
 $('#diagCloseX').onclick = () => $('#dlgDiag').close();
 $('#sRate').oninput = e => $('#sRateVal').textContent = e.target.value + '×';
 $('#sEndMs').oninput = e => $('#sEndMsVal').textContent = secs(+e.target.value);
+$('#sJarvis').onclick = () => {   // JARVIS-v1: ascolto del nome, conversazione continua, interruzione, risposte immediate, quadro e plancia
+  for (const id of ['#sWake', '#sFollow', '#sBarge', '#sFast', '#sBrief', '#sJbar', '#sPlancia', '#sSpeak']) $(id).checked = true;
+  if (hookBase()) $('#sStt').value = 'server';
+  toast('Tutto acceso: premi Salva');
+};
 $('#dlgSettings').addEventListener('close', async () => {
   if ($('#dlgSettings').returnValue !== 'ok') return;
   Object.assign(settings, {
