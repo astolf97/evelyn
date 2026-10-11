@@ -72,6 +72,20 @@ main{flex:1;min-height:0;display:flex;flex-direction:column}
 .pl-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--mint);margin-right:6px;vertical-align:middle;box-shadow:0 0 8px var(--mint)}
 .pl-dot.bad{background:var(--danger);box-shadow:0 0 8px var(--danger)}
 
+/* JARVIS-UI-v1: livello del microfono, barra delle domande rapide, risposte dirette e briefing */
+.meter{height:4px;width:min(260px,62vw);margin:-2px auto 8px;border-radius:999px;background:rgba(120,150,180,.16);overflow:hidden;opacity:0;transition:opacity .25s;flex:none}
+.meter.on{opacity:1}
+.meter i{display:block;height:100%;width:calc(var(--lv,0) * 100%);background:var(--c);box-shadow:0 0 10px var(--c);border-radius:inherit;transition:width .08s linear}
+.jbar{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 14px 8px;flex:none;justify-content:safe center;max-width:820px;width:100%;margin:0 auto}
+.jbar::-webkit-scrollbar{display:none}
+.jbar button{flex:none;font-family:var(--display);font-size:.8rem;letter-spacing:.02em;color:var(--text);background:rgba(10,20,34,.5);border:1px solid var(--line);
+  border-radius:999px;padding:6px 12px;cursor:pointer;transition:border-color .2s,transform .12s}
+.jbar button:hover{border-color:var(--acc-line)} .jbar button:active{transform:scale(.95)}
+.bot.fast{border-left:3px solid color-mix(in srgb,var(--mint) 70%,transparent)}
+.bot.brief{border-color:var(--acc-line);box-shadow:0 0 0 1px var(--acc-soft),0 10px 30px -16px var(--cyan)}
+.tool.lat{font-size:.7rem;opacity:.75}
+@media (max-height:700px){ .nnwrap{height:clamp(170px,30vh,300px)} }
+
 /* conversazione */
 .log{flex:1;overflow-y:auto;padding:6px 16px 14px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;
   mask-image:linear-gradient(to bottom,transparent 0,#000 18px,#000 100%);-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 18px,#000 100%)}
@@ -200,6 +214,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
     <span id="nnLabel" class="nnlabel"></span>
   </button>
   <div id="live" class="live"></div>
+  <div id="meter" class="meter" aria-hidden="true"><i></i></div>
+  <nav id="jbar" class="jbar" hidden aria-label="Domande rapide al gateway"></nav>
   <div id="plancia" class="plancia" hidden></div>
   <section id="log" class="log" aria-live="polite"></section>
 </main>
@@ -303,7 +319,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
         <label class="check"><input id="sWake" type="checkbox"> Sempre in ascolto: si attiva quando dici il suo nome</label>
         <label>Altre pronunce del nome<input id="sWakeAlt" placeholder="evelin, eveline"></label>
         <label class="check"><input id="sFollow" type="checkbox"> Conversazione continua: dopo aver risposto resta in ascolto per la tua replica</label>
-        <label class="check"><input id="sBarge" type="checkbox"> Interruzione a voce: di' "basta" mentre parla (solo PC)</label>
+        <label class="check"><input id="sBarge" type="checkbox"> Interruzione a voce: se parli mentre risponde, si ferma e ti ascolta</label>
+        <label><span>Fine della frase dopo <b id="sEndMsVal" style="color:var(--text);font-weight:500"></b> di silenzio</span><input id="sEndMs" type="range" min="400" max="1500" step="50"></label>
+        <label>Sensibilità dell'interruzione<select id="sBargeRatio"><option value="12">Bassa: solo voce forte (vivavoce rumoroso)</option><option value="8">Media</option><option value="5">Alta: basta parlare piano (con cuffie)</option></select></label>
+        <p class="hint">Con la trascrizione sul gateway l'ascolto si chiude da solo quando smetti di parlare: più corto = risposta più rapida, ma una pausa lunga a metà frase la taglia. Un tocco sulla rete mentre ascolta invia subito.</p>
       </div>
       <div class="card">
         <h3>Riconoscimento vocale</h3>
@@ -321,7 +340,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
           <label>Webhook da interrogare<select id="sMonitorHook"></select></label>
         </div>
         <label class="check"><input id="sPlancia" type="checkbox"> Plancia sotto la rete: servizi, coda e traffico di oggi</label>
-        <div class="btns left"><button type="button" id="sMonNow">Controlla adesso</button><button type="button" id="sPush">Attiva notifiche push</button></div>
+        <label class="check"><input id="sFast" type="checkbox"> Risposte immediate dal gateway per le domande frequenti (situazione, oggi, coda, telefoni…): niente Claude, niente costi</label>
+        <label class="check"><input id="sBrief" type="checkbox"> Quadro della situazione all'apertura (al massimo ogni 3 ore)</label>
+        <label class="check"><input id="sJbar" type="checkbox"> Barra delle domande rapide sotto la rete</label>
+        <label class="check"><input id="sTimes" type="checkbox"> Mostra i tempi di risposta sotto ogni risposta</label>
+        <p class="hint" id="sLat"></p>
+        <div class="btns left"><button type="button" id="sMonNow">Controlla adesso</button><button type="button" id="sBriefNow">Quadro della situazione</button><button type="button" id="sPush">Attiva notifiche push</button></div>
       </div>
       <div class="card">
         <h3>Webhook</h3>
@@ -406,7 +430,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
 };
-const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false };
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false, endMs:700, fastPath:true, briefing:true, showTimes:true, jbar:true, bargeRatio:8 };   // JARVIS-v1
 const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
 const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
 const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -447,6 +471,14 @@ const hooks = () => {   // CLAUDE-SALDO-v1: "gateway claude" si aggiunge da solo
   const hs = settings.hooks.split('\n').map(l => l.split('|').map(s => s.trim())).filter(p => p.length >= 2 && p[0] && /^https?:\/\//.test(p[1])).map(p => ({ name:p[0], url:p.slice(1).join('|') }));
   const g = hs.find(x => /\/webhooks\/evelyn\/[a-z_]+/.test(x.url));
   if (g && !hs.some(x => /\/webhooks\/evelyn\/claude\b/.test(x.url) || x.name === 'gateway claude')) hs.push({ name:'gateway claude', url:g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/claude') });
+  // JARVIS-CAPS-v1: le azioni del gateway che non sono nell'elenco dei webhook si aggiungono da sole (nomi in AUTO_HOOKS)
+  if (g && typeof gwActs !== 'undefined' && gwActs && gwActs.list){
+    const have = new Set(hs.map(x => (x.url.match(/\/webhooks\/evelyn\/([a-z_]+)/) || [])[1]).filter(Boolean)), names = new Set(hs.map(x => x.name));
+    for (const a of gwActs.list){
+      const nm = AUTO_HOOKS[a]; if (!nm || have.has(a) || names.has(nm)) continue;
+      hs.push({ name:nm, url:g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/' + a) });
+    }
+  }
   return hs;
 };
 const haOn = () => !!(settings.haUrl && settings.haToken);
@@ -762,7 +794,7 @@ function stopSpeaking(mute){
   tts.token++; tts.q = []; tts.busy = false; if (mute) tts.mutedTurn = true;
   try{ speechSynthesis.cancel(); }catch(e){}
   if (tts.audio){ try{ tts.audio.pause(); }catch(e){} tts.audio = null; }
-  if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+  if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); stopBargeServer(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
   tts.waiters.splice(0).forEach(f => f());
   if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
 }
@@ -804,7 +836,7 @@ function speakBrowser(item){
     const u = new SpeechSynthesisUtterance(item.text); tts.utt = u;
     u.lang = item.lang; u.rate = settings.rate; if (voice) u.voice = voice;
     let done = false; const fin = () => { if (!done){ done = true; res(); } };
-    u.onboundary = () => NN.pulse(); u.onend = fin; u.onerror = fin;
+    u.onboundary = () => NN.pulse(); u.onend = fin; u.onerror = fin; u.onstart = () => latMark('tAudio');
     setTimeout(fin, 4000 + item.text.length * 110 / settings.rate);
     NN.pulse(); speechSynthesis.speak(u);
   });
@@ -837,7 +869,7 @@ function playUrl(url, rate){
       }
     }catch(e){}
     const end = ok => { URL.revokeObjectURL(url); if (tts.audio === a) tts.audio = null; res(ok); };
-    a.onended = () => end(true); a.onerror = () => end(false);
+    a.onended = () => end(true); a.onerror = () => end(false); a.onplaying = () => latMark('tAudio');
     a.play().catch(() => end(false));
   });
 }
@@ -851,13 +883,13 @@ async function pump(){
   if (tts.busy) return;
   const item = tts.q.shift();
   if (!item){
-    if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
+    if (tts.speaking){ tts.speaking = false; if (recMode === 'barge') stopRec(); stopBargeServer(); setState(busy ? 'thinking' : 'idle'); duckAmbient(false); }
     if (tts.wasWake && !busy){ tts.wasWake = false; resumeWake(); }
     tts.waiters.splice(0).forEach(f => f()); return;
   }
   const token = tts.token; tts.busy = true;
   if (!tts.speaking){ tts.speaking = true; setState('speaking'); duckAmbient(true); }
-  if (recMode === 'wake'){ stopRec(); tts.wasWake = true; }
+  if (recMode === 'wake' || wakeLoopOn){ stopRec(); tts.wasWake = true; }
   if (!rec) startBargeIn();
   try{
     let played = false;
@@ -883,7 +915,7 @@ let rec = null, recMode = null, pendingWake = null;
 // seguito della conversazione) resta "in ascolto" senza mai ricevere audio né testo. Si aspetta che il precedente sia chiuso,
 // si mostra quando arriva audio, e un controllo di sicurezza chiude l'ascolto muto (o passa a Whisper se c'è la chiave).
 let recStoppedAt = 0;
-function stopRec(){ if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} rec = null; recMode = null; recStoppedAt = Date.now(); } }
+function stopRec(){ stopWakeLoop(); if (rec){ rec.onend = null; try{ rec.abort(); }catch(e){} rec = null; recMode = null; recStoppedAt = Date.now(); } }
 const SR_ERR = { 'not-allowed':'permesso del microfono negato', 'service-not-allowed':'riconoscimento vocale non consentito dal browser',
   'audio-capture':'il microfono è usato da un\'altra app o non è disponibile', 'network':'serve la connessione a internet per il riconoscimento vocale',
   'language-not-supported':'lingua non supportata dal riconoscimento vocale', 'bad-grammar':'errore del riconoscimento vocale' };
@@ -916,7 +948,7 @@ function listenCommand(){   // STT-FIX-v2
     else {
       setState('idle');
       if (sttHook() && !/negato|non consentito/.test(failed)){   // STT-ROBUST-v1: Chrome non ha trascritto: Whisper sul gateway, e da ora su questo dispositivo
-        store.set('sttAuto', 'server'); toast('Il riconoscimento di Chrome non trascrive: passo a Whisper sul gateway'); listenWhisper('server'); renderPending(); return;
+        store.set('sttAuto', 'server'); toast('Il riconoscimento di Chrome non trascrive: passo a Whisper sul gateway'); listenServer(); renderPending(); return;
       }
       if (!heard && !failed && settings.oaiKey){ listenWhisper(); renderPending(); return; }   // il riconoscimento del browser non ha dato segni: prova Whisper
       toast(failed || 'Non ho sentito niente, riprova');
@@ -939,18 +971,6 @@ function listenCommand(){   // STT-FIX-v2
   setTimeout(go, Math.max(0, 450 - (Date.now() - recStoppedAt)));   // STT-FIX-v1: il riconoscimento precedente deve chiudersi davvero
 }
 let wakeBlocked = false;
-// WAKE-SERVER-v1: parola di attivazione con Whisper sul gateway (dove il riconoscimento continuo di Chrome non trascrive).
-// Il telefono misura solo il volume; quando qualcuno parla ritaglia la frase (con 1 s di memoria per non perdere l'inizio),
-// la manda al gateway in WAV 16 kHz e cerca il nome nel testo. Un pezzo alla volta; i suoni sotto 0,3 s di parlato si scartano.
-function wavFromFloat(chunks, rate){
-  const len = chunks.reduce((n, c) => n + c.length, 0), ratio = rate / 16000, out = Math.floor(len / ratio);
-  const all = new Float32Array(len); let o = 0; for (const c of chunks){ all.set(c, o); o += c.length; }
-  const buf = new ArrayBuffer(44 + out * 2), dv = new DataView(buf), w = (p, t) => [...t].forEach((ch, i) => dv.setUint8(p + i, ch.charCodeAt(0)));
-  w(0, 'RIFF'); dv.setUint32(4, 36 + out * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-  dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, out * 2, true);
-  for (let i = 0; i < out; i++){ const v = Math.max(-1, Math.min(1, all[Math.floor(i * ratio)] || 0)); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
-  return new Blob([buf], { type:'audio/wav' });
-}
 let wakeNeedsTap = false;
 document.addEventListener('pointerdown', () => {   // WAKE-SERVER-v2: il tocco sblocca il motore audio
   if (!wakeNeedsTap) return;
@@ -958,68 +978,8 @@ document.addEventListener('pointerdown', () => {   // WAKE-SERVER-v2: il tocco s
   if (actx && actx.state !== 'running') actx.resume().catch(() => {});
   if (!rec && settings.wake && !busy) resumeWake();
 }, true);
-function startWakeServer(){
-  if (!settings.wake || busy || rec || wakeBlocked || wrec || dictation) return;
-  const stub = { onend:null, stopped:false, abort(){ this.stopped = true; cleanup(); }, stop(){ this.stopped = true; cleanup(); } };
-  rec = stub; recMode = 'wake'; setState('wake');
-  let stream = null, src = null, proc = null, inFlight = false;
-  const cleanup = () => {
-    try{ proc && proc.disconnect(); src && src.disconnect(); }catch(e){}
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    if (rec === stub){ rec = null; recMode = null; recStoppedAt = Date.now(); }
-  };
-  navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } }).then(st => {
-    stream = st;
-    if (stub.stopped){ cleanup(); return; }
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === 'suspended') actx.resume().catch(() => {});
-    src = actx.createMediaStreamSource(stream); proc = actx.createScriptProcessor(4096, 1, 1);
-    src.connect(proc); proc.connect(actx.destination);   // l'uscita resta muta: serve solo a far girare l'elaborazione
-    // WAKE-SERVER-v2: su Android, aperta l'app senza un tocco, il motore audio resta sospeso e il microfono non viene analizzato:
-    // lo si dice nella barra di stato e si riattiva al primo tocco sullo schermo
-    let ticks = 0;
-    setTimeout(() => { if (!stub.stopped && (actx.state !== 'running' || !ticks)){ wakeNeedsTap = true; $('#status').textContent = 'Tocca lo schermo per attivare l\'ascolto di "' + settings.name + '"'; } }, 2000);
-    const rate = actx.sampleRate, pre = [], clip = []; let preLen = 0, talking = false, voiced = 0, silent = 0, clipLen = 0;
-    proc.onaudioprocess = e => {
-      if (stub.stopped) return;
-      if (!ticks++){ wakeNeedsTap = false; if (recMode === 'wake') $('#status').textContent = 'In ascolto: di\' "' + settings.name + '" (Whisper)'; }
-      const d = new Float32Array(e.inputBuffer.getChannelData(0)), ms = d.length / rate * 1000;
-      let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
-      const loud = Math.sqrt(sum / d.length) > 0.015;
-      if (!talking){
-        pre.push(d); preLen += d.length; while (preLen > rate && pre.length > 1) preLen -= pre.shift().length;   // 1 s di memoria
-        if (loud){ talking = true; clip.length = 0; clip.push(...pre); clipLen = preLen; voiced = ms; silent = 0; NN.pulse(); }
-        return;
-      }
-      clip.push(d); clipLen += d.length;
-      if (loud){ voiced += ms; silent = 0; NN.pulse(); } else silent += ms;
-      if (silent > 700 || clipLen / rate > 5){
-        talking = false; pre.length = 0; preLen = 0;
-        if (voiced < 300 || inFlight || !sttHook()) return;
-        inFlight = true;
-        const blob = wavFromFloat(clip.splice(0), rate), u = sttHook();
-        fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':'audio/wav' }, body:blob })
-          .then(r => r.json()).then(j => {
-            inFlight = false;
-            if (stub.stopped || !j || !j.text) return;
-            const t = j.text.trim(), tl = t.toLowerCase();
-            for (const nm of wakeNames()){
-              const idx = tl.indexOf(nm); if (idx < 0) continue;
-              const cmd = t.slice(idx + nm.length).replace(/^[\s,.!?]+/, '').trim();
-              stub.stopped = true; cleanup();
-              if (cmd.length > 2) handleUser(cmd, [], { voice:true }); else { chime(); listenAny(); }
-              return;
-            }
-          }).catch(() => { inFlight = false; });
-      }
-    };
-  }).catch(e => {
-    cleanup(); wakeBlocked = true;
-    if (/denied|NotAllowed/i.test(e.name + e.message)) toast('Ascolto in pausa: tocca lo schermo per riattivarlo');
-  });
-}
 function startWake(){
-  if (settings.wake && useServerStt() && navigator.mediaDevices && (window.AudioContext || window.webkitAudioContext)){ startWakeServer(); return; }   // WAKE-SERVER-v1
+  if (settings.wake && useServerStt() && navigator.mediaDevices && (window.AudioContext || window.webkitAudioContext)){ if (!busy && !dictation && !earTurn && !tts.speaking) wakeLoop(); return; }   // JARVIS-WAKE-v2
   if (!SR || !settings.wake || busy || rec || wakeBlocked) return;
   rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'wake';
   rec.onresult = e => {
@@ -1051,6 +1011,7 @@ function startWake(){
 function resumeWake(){ if (settings.wake) setTimeout(startWake, 400); }
 document.addEventListener('pointerdown', () => { if (wakeBlocked){ wakeBlocked = false; resumeWake(); } }, true);
 function startBargeIn(){
+  if (useServerStt() && navigator.mediaDevices){ if (!dictation) startBargeServer(); return; }   // JARVIS-BARGE-v1
   if (!settings.bargeIn || !SR || isAndroid || rec || dictation || !tts.speaking) return;
   rec = new SR(); rec.lang = settings.lang; rec.continuous = true; rec.interimResults = false; recMode = 'barge';
   rec.onresult = e => {
@@ -1067,7 +1028,7 @@ function startBargeIn(){
 // È il motore predefinito quando il gateway è collegato: il riconoscimento di Chrome su alcuni telefoni ascolta ma non trascrive.
 const sttHook = () => { const g = hooks().find(x => /\/webhooks\/evelyn\/[a-z_]+/.test(x.url)); return g ? g.url.replace(/\/webhooks\/evelyn\/[a-z_]+/, '/webhooks/evelyn/stt') : null; };
 const useServerStt = () => !!sttHook() && (settings.stt === 'server' || (settings.stt === 'google' && (!settings.sttChosen || store.get('sttAuto') === 'server')));
-const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : useServerStt() ? listenWhisper('server') : listenCommand();
+const listenAny = () => (settings.stt === 'whisper' && settings.oaiKey) ? listenWhisper() : useServerStt() ? listenServer() : listenCommand();   // JARVIS-LISTEN-v1
 let wrec = null;
 async function listenWhisper(mode){
   if (wrec){ wrec.stopNow(); return; }
@@ -1100,7 +1061,7 @@ async function listenWhisper(mode){
       const blob = new Blob(chunks, { type:mr.mimeType || 'audio/webm' }), fd = new FormData();
       fd.append('file', blob, 'audio.' + (blob.type.includes('mp4') ? 'mp4' : 'webm')); fd.append('model', 'whisper-1'); fd.append('language', settings.lang.slice(0, 2)); fd.append('response_format', 'json');
       const u = mode === 'server' ? sttHook() : null;
-      const r = u ? await fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob })
+      const r = u ? await gwFetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob })
                   : await fetch('https://api.openai.com/v1/audio/transcriptions', { method:'POST', headers:{ Authorization:'Bearer ' + settings.oaiKey }, body:fd });
       const d = await r.json(); $('#live').textContent = '';
       if (u && !r.ok) throw new Error(d.errore || 'HTTP ' + r.status);
@@ -1135,7 +1096,7 @@ async function startDictationServer(opts){
       if (blob.size < 2000 || d.closed) return;   // dopo "fine dettatura" non si aggiunge altro
       d.interim = '(trascrivo…)'; show();
       try{
-        const u = sttHook(), r = await fetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob });
+        const u = sttHook(), r = await gwFetch(u + (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2), { method:'POST', headers:{ 'Content-Type':blob.type || 'audio/webm' }, body:blob });
         const j = await r.json(); if (!r.ok) throw new Error(j.errore || 'HTTP ' + r.status);
         let t = (j.text || '').trim();
         const m = t.match(DICT_END); if (m){ t = m[1].trim(); d.stop = true; d.closed = true; }
@@ -1663,7 +1624,7 @@ const IMPL = {
   async call_webhook({ name, payload = {} }){
     const h = hooks().find(x => x.name === name) || hooks().find(x => x.name.toLowerCase() === String(name).toLowerCase());
     if (!h) return { error:'Webhook non trovato. Disponibili: ' + hooks().map(x => x.name).join(', ') };
-    const r = await fetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload) });
+    const r = await gwFetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload) });   // JARVIS-KEY-v1
     return { stato_http:r.status, risposta:(await r.text()).slice(0, 1500) };
   }
 };
@@ -1692,7 +1653,8 @@ Quando compare un pulsante da toccare (messaggi, chiamate, link bloccati, calend
 Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remember. Se servono un numero o un contatto che non conosci, chiedilo.
 Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
 Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
-I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo". Per "cosa devo fare oggi", cose rimaste indietro o suggerimenti sui clienti usa "gateway crm": legge direttamente il CRM (scadenze, clienti fermi, onboarding, follow-up aperti) e ti dà già le priorità. Il gateway impara come l'utente chiama account, telefoni, clienti e paesi quando conferma un'azione: usa pure i suoi modi di dire. Se l'utente dice "ricorda che X è Y" riferito al gateway (un account, un telefono, un cliente, un paese), usa "gateway ricorda" con {"termine", "significa", "tipo"}; se un modo di dire è sbagliato o l'hai capito male (per esempio "mmd casa" invece di "mmd cas"), toglilo con "gateway ricorda" e {"termine": ..., "dimentica": true}, oppure {"significa": ..., "dimentica": true} per togliere tutti quelli che portano a quell'account; per sapere cosa è stato fatto di recente o ripetere un'azione passata ("rifai come ieri") usa "gateway memoria". Per credito, saldo o spesa di Claude usa "gateway claude"; se l'utente dice quanto credito ha adesso o che ha ricaricato, passagli {"saldo": nuovo totale in dollari} (dopo una ricarica il totale è il credito rimasto più la ricarica: se non lo sai chiediglielo), e {"soglia": X} per l'avviso di credito basso.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
+I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo". Per "cosa devo fare oggi", cose rimaste indietro o suggerimenti sui clienti usa "gateway crm": legge direttamente il CRM (scadenze, clienti fermi, onboarding, follow-up aperti) e ti dà già le priorità. Il gateway impara come l'utente chiama account, telefoni, clienti e paesi quando conferma un'azione: usa pure i suoi modi di dire. Se l'utente dice "ricorda che X è Y" riferito al gateway (un account, un telefono, un cliente, un paese), usa "gateway ricorda" con {"termine", "significa", "tipo"}; se un modo di dire è sbagliato o l'hai capito male (per esempio "mmd casa" invece di "mmd cas"), toglilo con "gateway ricorda" e {"termine": ..., "dimentica": true}, oppure {"significa": ..., "dimentica": true} per togliere tutti quelli che portano a quell'account; per sapere cosa è stato fatto di recente o ripetere un'azione passata ("rifai come ieri") usa "gateway memoria". Per credito, saldo o spesa di Claude usa "gateway claude"; se l'utente dice quanto credito ha adesso o che ha ricaricato, passagli {"saldo": nuovo totale in dollari} (dopo una ricarica il totale è il credito rimasto più la ricarica: se non lo sai chiediglielo), e {"soglia": X} per l'avviso di credito basso.
+JARVIS-v1. Ti comporti come un maggiordomo esperto alla Jarvis: prima il dato che serve, detto in breve; poi, se c'è qualcosa da controllare o da fare, lo suggerisci in una frase e offri di farlo tu (le azioni che cambiano qualcosa chiedono sempre la conferma col codice). Per "com'è la situazione", "novità", "cosa devo fare o controllare" usa "gateway situazione": dà il quadro con le priorità e i suggerimenti. Per un telefono o le sue SIM (stato, pausa, credito, test, batteria) usa "gateway telefono" con {"device": "duck-45" o il nome}; per la capacità e la coda di un paese "gateway capacità per paese" con {"paese"}; per un numero di telefono (blacklist e ultimi messaggi) "gateway numero" con {"numero"}; per ieri "gateway ieri"; per i soldi da incassare "gateway incassi"; per il credito delle SIM "gateway credito giffgaff"; per i test delle SIM "gateway test sim"; per operatori e paesi "gateway cross"; per le notifiche ancora aperte "gateway notifiche aperte". Se un webhook del gateway non esiste ancora (azione sconosciuta), usa quelli di prima senza dirlo all'utente.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
   const dynamic = `Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.
 Routine disponibili:
 ${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
@@ -1805,8 +1767,8 @@ async function runAgent(turn, speaker){
   const ctx = { system:systemPrompt(), tools:cachedTools() };   // istruzioni e strumenti fissi per tutta la risposta: se cambiano a metà (l'ora, una nota) Claude rifiuta il proprio ragionamento
   for (let step = 0; step < 12; step++){
     let bubble = null, acc = '';
-    const data = await callClaude([...history.flat().map(noThinking), ...turn], { ctx,
-      onText:t => { if (!bubble) bubble = addMsg('bot', ''); acc += t; bubble.textContent = cleanText(acc); scrollLog(); speaker.push(t); NN.pulse(); },
+    const data = await callClaude(withHistoryCache([...history.flat().map(noThinking)], turn), { ctx,
+      onText:t => { latMark('tAnswer'); if (!bubble) bubble = addMsg('bot', ''); acc += t; bubble.textContent = cleanText(acc); scrollLog(); speaker.push(t); NN.pulse(); },
       onBlockStart:b => { if (b.type === 'server_tool_use'){ NN.burst(4); NN.label(TOOL_LABEL[b.name] || b.name); } }
     });
     turn.push({ role:'assistant', content:data.content });
@@ -1831,6 +1793,14 @@ async function runAgent(turn, speaker){
   speaker.flush();
   return final;
 }
+// JARVIS-SPEED-v1: la conversazione già fatta si mette in cache (punto di cache sull'ultimo messaggio dello storico):
+// dal secondo turno Claude rilegge solo il nuovo, prima risposta più veloce e meno costi.
+function withHistoryCache(hist, turn){
+  if (!hist.length) return [...hist, ...turn];
+  const last = hist[hist.length - 1], c = typeof last.content === 'string' ? [{ type:'text', text:last.content }] : last.content.map(b => Object.assign({}, b));
+  for (let i = c.length - 1; i >= 0; i--){ if (['text', 'tool_result', 'tool_use', 'image', 'document'].includes(c[i].type)){ c[i] = Object.assign({}, c[i], { cache_control:{ type:'ephemeral' } }); break; } }
+  return [...hist.slice(0, -1), Object.assign({}, last, { content:c }), ...turn];
+}
 function logT(k, t){ transcript.push({ k, t }); if (transcript.length > 80) transcript = transcript.slice(-80); store.set('transcript', transcript); }
 function persistHistory(){ store.set('history', history.map(t => t.map(m => ({ role:m.role, content:stripHeavy(m.content) })))); }
 function noThinking(m){   // i blocchi di ragionamento dei turni conclusi non servono e scadono se cambiano istruzioni o strumenti
@@ -1850,6 +1820,13 @@ function trimHistory(){
 }
 async function handleUser(text, atts = [], opts = {}){
   if (busy) return;
+  if (!(opts.voice && LAT.cur && !LAT.cur.shown && LAT.cur.tStt !== undefined && performance.now() - LAT.cur.tStt < 5000)) latStart(opts.voice ? 'voce' : 'testo');   // JARVIS-v1: tempi
+  if (!atts.length && text && !opts.noFast){   // JARVIS-FAST-v1: domande frequenti sul gateway → risposta diretta, niente Claude
+    busy = true; setState('thinking');
+    let d = null; try{ d = await fastAnswer(text); }catch(e){} finally { busy = false; }
+    if (d){ answerFast(text, d, opts); return; }
+    if (!tts.speaking) setState('idle');
+  }
   if (!settings.apiKey){ openSettings(); toast('Inserisci la tua API key Anthropic'); return; }
   busy = true; stopRec(); stopSpeaking(); tts.mutedTurn = false; renderPending(); curModel = pickModel(text, atts);
   text = text || 'Analizza gli allegati.';
@@ -1864,13 +1841,15 @@ async function handleUser(text, atts = [], opts = {}){
     history.push(turn); trimHistory(); persistHistory();
     if (reply) logT('bot', cleanText(reply));
     await ttsWait();
+    if (LAT.cur && !settings.speak) LAT.cur.noVoice = true;
+    latShow();
   }catch(e){
     console.error(e); addMsg('err', 'Errore: ' + e.message); logT('err', 'Errore: ' + e.message);
   }finally{
     busy = false;
     if (!tts.speaking) setState('idle');
     if (pendingDictation) setTimeout(() => { if (!busy) startDictation(pendingDictation); }, 300);
-    else if (opts.voice && settings.followUp && reply && !tts.mutedTurn && SR) setTimeout(() => { if (!busy && !rec) listenAny(); }, 250);
+    else if (opts.voice && settings.followUp && reply && !tts.mutedTurn && (SR || useServerStt())) setTimeout(() => { if (!busy && !rec && !earTurn) followUp(); }, 250);
     else resumeWake();
   }
 }
@@ -2081,6 +2060,18 @@ async function runDiagnostics(){
     catch(e){ return ['bad', e instanceof TypeError ? 'non raggiungibile: serve HTTPS e il tuo indirizzo GitHub in cors_allowed_origins' : e.message]; }
   });
   if (hooks().length) await check('Webhook', async () => ['ok', hooks().map(h => h.name).join(', ')]);
+  if (hookBase()) await check('Gateway', async () => {   // JARVIS-CAPS-v1
+    const t = performance.now(), c = await gwCaps(true);
+    if (!c || !c.list) return ['bad', 'non risponde: controlla il webhook e la chiave'];
+    return [gwHas('rapido') ? 'ok' : 'warn', `${c.list.length} azioni in ${Math.round(performance.now() - t)} ms` + (gwHas('rapido') ? ', risposte immediate attive' : ', versione senza risposte immediate e quadro della situazione (si usano le azioni di prima)')];
+  });
+  if (sttHook()) await check('Trascrizione sul gateway', async () => {
+    const st = await Ear.open().catch(e => { throw new Error('microfono: ' + e.message); });
+    const t = performance.now(), r = await sttSend(wav16k([new Float32Array(Math.round(st.rate * 0.6))], st.rate)).catch(e => ({ __e:e })); Ear.idle(5000);
+    if (r.__e) return ['bad', r.__e.message];
+    return ['ok', `risponde in ${Math.round(performance.now() - t)} ms` + (r.ms !== undefined ? ` (Whisper ${r.ms} ms)` : '')];
+  });
+  await check('Tempi di risposta', async () => ['ok', latSummary()]);
 }
 function openDiag(){ $('#dlgDiag').showModal(); runDiagnostics(); }
 $('#diagRun').onclick = runDiagnostics;
@@ -2094,7 +2085,7 @@ function hookBase(){
   const u = new URL(h.url); return { base:u.origin + u.pathname.replace(/\/[^/]+$/, ''), key:u.searchParams.get('k') || '' };
 }
 async function callHook(h, payload){
-  const r = await fetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload || {}) });
+  const r = await gwFetch(h.url, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(payload || {}) });   // JARVIS-KEY-v1
   const txt = await r.text(); try{ return JSON.parse(txt); }catch(e){ return { riassunto:txt.slice(0, 500) }; }
 }
 function alertsFromStato(d){
@@ -2164,27 +2155,374 @@ async function enablePush(){
   if (!swReg || !('PushManager' in window)){ toast('Notifiche push non disponibili in questo browser o da questo indirizzo'); return; }
   try{
     if ((await Notification.requestPermission()) !== 'granted'){ toast('Permesso notifiche negato'); return; }
-    const v = await (await fetch(`${hb.base}/push/vapid?k=${hb.key}`)).json().catch(() => ({}));
+    const kh = { 'X-Evelyn-Key':hb.key };   // JARVIS-KEY-v1: chiave nell'intestazione
+    const v = await (await fetch(`${hb.base}/push/vapid`, { headers:kh })).json().catch(() => ({}));
     if (!v.publicKey){ toast('Il gateway non ha ancora il modulo push: serve la parte server'); return; }
     const sub = await swReg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToU8(v.publicKey) });
-    const r = await fetch(`${hb.base}/push/subscribe?k=${hb.key}`, { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify({ subscription:sub.toJSON(), device:isAndroid ? 'android' : 'pc', name:settings.userName || '' }) });
+    const r = await fetch(`${hb.base}/push/subscribe`, { method:'POST', headers:Object.assign({ 'content-type':'application/json' }, kh), body:JSON.stringify({ subscription:sub.toJSON(), device:isAndroid ? 'android' : 'pc', name:settings.userName || '' }) });
     if (!r.ok) throw new Error('il gateway ha risposto ' + r.status);
     settings.pushOn = true; saveSettings(); toast('Notifiche push attive su questo dispositivo');
   }catch(e){ toast('Push: ' + e.message); }
 }
 $('#sMonNow').onclick = () => { $('#dlgSettings').close('ok'); monitorTick(true, true); };
 $('#sPush').onclick = enablePush;
+$('#sBriefNow').onclick = () => { $('#dlgSettings').close('ok'); briefing(true); };
+
+/* ================= JARVIS-v1: gateway veloce, ascolto con fine frase automatica, risposte immediate, briefing ================= */
+/* JARVIS-KEY-v1: la chiave del gateway viaggia nell'intestazione X-Evelyn-Key, mai nell'indirizzo (finirebbe nei log di accesso).
+   I webhook nelle impostazioni restano scritti come prima (…?k=…): la chiave si toglie dall'indirizzo al momento della chiamata. */
+function gwSplit(url){
+  try{
+    const u = new URL(url);
+    if (!/\/webhooks\/evelyn\//.test(u.pathname)) return { url, headers:{} };
+    const k = u.searchParams.get('k'); if (!k) return { url, headers:{} };
+    u.searchParams.delete('k'); return { url:u.toString(), headers:{ 'X-Evelyn-Key':k } };
+  }catch(e){ return { url, headers:{} }; }
+}
+function gwFetch(url, opts = {}){ const g = gwSplit(url); return fetch(g.url, Object.assign({}, opts, { headers:Object.assign({}, opts.headers || {}, g.headers) })); }
+/* chiamata a un'azione del gateway per nome (anche senza riga nei webhook), con tempo massimo */
+async function gwAction(name, payload, ms = 15000){
+  const hb = hookBase(); if (!hb) throw new Error('gateway non configurato');
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try{
+    const r = await fetch(`${hb.base}/${name}`, { method:'POST', signal:ctl.signal, headers:{ 'content-type':'application/json', 'X-Evelyn-Key':hb.key }, body:JSON.stringify(payload || {}) });
+    const txt = await r.text(); let d; try{ d = JSON.parse(txt); }catch(e){ d = { riassunto:txt.slice(0, 500) }; }
+    d.__status = r.status; return d;
+  } finally { clearTimeout(t); }
+}
+/* JARVIS-CAPS-v1: quali azioni ha il gateway (un'azione sconosciuta risponde con l'elenco «disponibili»): le funzioni nuove si
+   accendono da sole quando il gateway è aggiornato, e con quello di prima l'app fa come prima */
+let gwActs = store.get('gwActs', null);
+const gwHas = a => !!(gwActs && gwActs.list && gwActs.list.includes(a));
+async function gwCaps(force){
+  if (!hookBase()) return null;
+  if (!force && gwActs && Date.now() - gwActs.t < 6 * 3600e3) return gwActs;
+  try{ const d = await gwAction('_elenco', {}, 8000); if (Array.isArray(d.disponibili)){ gwActs = { t:Date.now(), list:d.disponibili }; store.set('gwActs', gwActs); } }catch(e){}
+  return gwActs;
+}
+const AUTO_HOOKS = { situazione:'gateway situazione', telefono:'gateway telefono', capacita:'gateway capacità per paese', ieri:'gateway ieri',
+  numero:'gateway numero', cross:'gateway cross', incassi:'gateway incassi', credito:'gateway credito giffgaff', esiti_test:'gateway test sim',
+  notifiche_aperte:'gateway notifiche aperte', allarmi:'gateway allarmi', dispositivi:'gateway dispositivi', account:'gateway account',
+  owner:'gateway owner', settimana:'gateway settimana', coda:'gateway coda', oggi:'gateway traffico oggi', stato:'gateway stato',
+  provider:'gateway provider smpp', sim_pausa:'gateway sim pausa', sim_test:'gateway sim test', pannello:'gateway pannello',
+  prezzi:'gateway prezzi', prezzo:'gateway prezzo', crm_oggi:'gateway crm', memoria:'gateway memoria', ricorda:'gateway ricorda' };
+
+/* ---------- tempi di risposta (fine della frase → testo → risposta → prima parola) ---------- */
+const LAT = { cur:null };
+function latStart(src){ LAT.cur = { src, tEnd:performance.now() }; return LAT.cur; }
+function latMark(k){ if (LAT.cur && LAT.cur[k] === undefined) LAT.cur[k] = performance.now(); }
+const secs = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
+function latShow(){
+  const c = LAT.cur; if (!c || c.shown || c.tAudio === undefined && settings.speak && !c.noVoice) return;
+  c.shown = true;
+  const p = [];
+  if (c.tStt !== undefined) p.push('testo ' + secs(c.tStt - c.tEnd));
+  if (c.tAnswer !== undefined) p.push((c.fast ? 'risposta dal gateway ' : 'prima parola di Claude ') + secs(c.tAnswer - (c.tStt ?? c.tEnd)));
+  if (c.tAudio !== undefined) p.push('voce ' + secs(c.tAudio - c.tEnd) + ' dalla fine della frase');
+  const all = store.get('lat', []); all.push({ at:Date.now(), src:c.src, fast:!!c.fast, stt:c.tStt !== undefined ? Math.round(c.tStt - c.tEnd) : null,
+    ans:c.tAnswer !== undefined ? Math.round(c.tAnswer - (c.tStt ?? c.tEnd)) : null, audio:c.tAudio !== undefined ? Math.round(c.tAudio - c.tEnd) : null });
+  store.set('lat', all.slice(-40));
+  if (settings.showTimes && p.length){ const d = addMsg('tool', '⏱ ' + p.join(' · ')); d.classList.add('lat'); }
+}
+function latSummary(){
+  const all = store.get('lat', []).filter(x => x.audio !== null || x.ans !== null);
+  if (!all.length) return 'nessuna misura ancora';
+  const med = a => { const v = a.filter(x => x !== null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  const f = all.filter(x => x.fast), c = all.filter(x => !x.fast);
+  const part = (lab, xs) => xs.length ? `${lab}: voce dopo ${secs(med(xs.map(x => x.audio)) ?? 0)} (testo ${secs(med(xs.map(x => x.stt)) ?? 0)})` : '';
+  return [part('risposte dirette', f), part('con Claude', c)].filter(Boolean).join(' · ') + ` · ultime ${all.length}`;
+}
+
+/* ---------- JARVIS-EAR-v1: microfono, volume, fine frase automatica (VAD) e WAV 16 kHz per Whisper ---------- */
+const Ear = {
+  st:null, opening:null, idleT:null, sinks:new Set(),
+  async open(){
+    clearTimeout(this.idleT);
+    if (this.st) return this.st;
+    if (this.opening) return this.opening;
+    this.opening = (async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1 } });
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') await actx.resume().catch(() => {});
+      const src = actx.createMediaStreamSource(stream), proc = actx.createScriptProcessor(2048, 1, 1), mute = actx.createGain();
+      mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(actx.destination);   // uscita muta: serve solo a far girare l'elaborazione
+      const st = { stream, src, proc, mute, rate:actx.sampleRate, floor:0.006, ticks:0 };
+      proc.onaudioprocess = e => {
+        const d = new Float32Array(e.inputBuffer.getChannelData(0)); let s = 0;
+        for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+        const rms = Math.sqrt(s / d.length); st.ticks++;
+        for (const f of this.sinks) try{ f(d, rms, st); }catch(err){ console.warn(err); }
+      };
+      stream.getAudioTracks()[0].addEventListener('ended', () => this.close());
+      this.st = st; return st;
+    })();
+    try{ return await this.opening; } finally { this.opening = null; }
+  },
+  close(){
+    clearTimeout(this.idleT); const st = this.st; this.st = null; this.sinks.clear();
+    if (!st) return;
+    try{ st.proc.disconnect(); st.src.disconnect(); st.mute.disconnect(); }catch(e){}
+    st.stream.getTracks().forEach(t => t.stop());
+  },
+  idle(ms = 45000){   // il microfono resta aperto un po' (conversazione più rapida), poi si chiude se nessuno lo usa
+    clearTimeout(this.idleT);
+    this.idleT = setTimeout(() => { if (!this.sinks.size && !(settings.wake && useServerStt())) this.close(); }, ms);
+  }
+};
+function wav16k(chunks, rate){
+  const len = chunks.reduce((n, c) => n + c.length, 0), all = new Float32Array(len); let o = 0;
+  for (const c of chunks){ all.set(c, o); o += c.length; }
+  const ratio = rate / 16000, out = Math.floor(len / ratio), buf = new ArrayBuffer(44 + out * 2), dv = new DataView(buf);
+  const w = (p, t) => [...t].forEach((ch, i) => dv.setUint8(p + i, ch.charCodeAt(0)));
+  w(0, 'RIFF'); dv.setUint32(4, 36 + out * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, out * 2, true);
+  for (let i = 0; i < out; i++){   // media sui campioni di ogni passo (filtro anti-aliasing semplice)
+    const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)); let s = 0;
+    for (let j = a; j < b; j++) s += all[j] || 0;
+    const v = Math.max(-1, Math.min(1, s / (b - a))); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Blob([buf], { type:'audio/wav' });
+}
+/* Ascolta una frase: aspetta che si parli (fino a waitMs), la registra con un po' di memoria prima, la chiude dopo endMs di silenzio.
+   onEarly(wav, mark) arriva dopo earlyMs di silenzio (risposta anticipata: il testo è spesso pronto quando la frase finisce davvero).
+   Risolve { wav, mark, ms } oppure null (nessuna voce), o { aborted:true }. */
+function hearUtterance(opts = {}){
+  const waitMs = opts.waitMs ?? 8000, endMs = opts.endMs ?? (settings.endMs || 700), earlyMs = Math.min(opts.earlyMs ?? 320, endMs - 120),
+        maxMs = opts.maxMs ?? 20000, preMs = opts.preMs ?? 450;
+  return new Promise(async resolve => {
+    let st;
+    try{ st = await Ear.open(); }catch(e){ resolve({ error:e }); return; }
+    const pre = [], clip = []; let preLen = 0, talking = false, voicedMs = 0, silentMs = 0, waited = 0, total = 0, frames = 0, lastVoice = -1, early = false, run = 0, done = false;
+    const t0 = performance.now();
+    const finish = v => { if (done) return; done = true; Ear.sinks.delete(sink); if (opts.signal) opts.signal.onabort = null; resolve(v); };
+    if (opts.signal) opts.signal.onabort = () => finish({ aborted:true });
+    if (opts.ctrl) opts.ctrl.finish = () => finish(talking && voicedMs >= 200 ? { wav:wav16k(clip, st.rate), mark:lastVoice, ms:performance.now() - t0, voicedMs } : null);
+    if (opts.preroll && opts.preroll.length){ clip.push(...opts.preroll); talking = true; voicedMs = 300; lastVoice = opts.preroll.length - 1; frames = opts.preroll.length; }
+    const sink = (d, rms, s) => {
+      const ms = d.length / s.rate * 1000;
+      // soglia adattiva: rumore di fondo stimato quando nessuno parla
+      if (!talking || rms < s.floor * 2) s.floor = Math.min(0.05, Math.max(0.002, s.floor * 0.97 + rms * 0.03));
+      const thr = Math.max(opts.minThr ?? 0.012, s.floor * (opts.ratio ?? 3.2)), loud = rms > thr;
+      if (opts.onLevel) opts.onLevel(Math.min(1, rms / (thr * 3)), loud);
+      if (!talking){
+        pre.push(d); preLen += ms; while (preLen > preMs && pre.length > 1) preLen -= pre[0].length / s.rate * 1000, pre.shift();
+        waited += ms;
+        run = loud ? run + ms : 0;
+        if (run >= 90){ talking = true; clip.push(...pre); frames = clip.length; lastVoice = frames - 1; voicedMs = run; silentMs = 0; if (opts.onStart) opts.onStart(); }
+        else if (waited > waitMs) finish(null);
+        return;
+      }
+      clip.push(d); frames++; total += ms;
+      if (loud){ voicedMs += ms; silentMs = 0; lastVoice = frames - 1; early = false; NN.pulse(); }
+      else silentMs += ms;
+      if (opts.onEarly && !early && silentMs >= earlyMs && voicedMs >= 350){ early = true; opts.onEarly(wav16k(clip, s.rate), lastVoice); }
+      if (silentMs >= endMs || total > maxMs){
+        if (voicedMs < 260 && total <= maxMs){   // colpo di tosse, rumore: si torna ad aspettare
+          talking = false; clip.length = 0; pre.length = 0; preLen = 0; voicedMs = 0; silentMs = 0; total = 0; frames = 0; lastVoice = -1; early = false; run = 0; return;
+        }
+        finish({ wav:wav16k(clip, s.rate), mark:lastVoice, ms:performance.now() - t0, voicedMs });
+      }
+    };
+    Ear.sinks.add(sink);
+  });
+}
+async function sttSend(wav, mode = 'cmd'){
+  const u = sttHook(); if (!u) throw new Error('gateway non configurato');
+  const q = (u.includes('?') ? '&' : '?') + 'lang=' + settings.lang.slice(0, 2) + '&mode=' + mode + (settings.fastPath && mode !== 'dict' ? '&rapido=1' : '');
+  const r = await gwFetch(u + q, { method:'POST', headers:{ 'Content-Type':'audio/wav' }, body:wav });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.errore || j.error || 'HTTP ' + r.status);
+  return j;
+}
+/* JARVIS-LISTEN-v1: ascolto di un comando con Whisper sul gateway. Fine frase automatica, testo anticipato durante la pausa finale,
+   e se il gateway riconosce una domanda frequente la risposta arriva insieme al testo (un solo giro, niente Claude). */
+let earTurn = null;
+async function listenServer(opts = {}){
+  if (earTurn){ earTurn.ctl.abort(); return; }
+  stopRec(); if (!opts.keepSpeech) stopSpeaking();
+  const ctl = new AbortController(), me = earTurn = { ctl, ctrl:{} };
+  setState('listening'); live(opts.prompt || 'Ti ascolto…');
+  let early = null;
+  const res = await hearUtterance({ signal:ctl.signal, ctrl:me.ctrl, preroll:opts.preroll, waitMs:opts.waitMs,
+    onLevel:(l, loud) => meter(l, loud), onStart:() => live('…'),
+    onEarly:(wav, mark) => { early = { mark, p:sttSend(wav).catch(e => ({ __err:e })) }; } });
+  if (earTurn === me) earTurn = null;
+  meter(0); Ear.idle();
+  if (!res || res.aborted || res.error){
+    live(''); setState('idle');
+    if (res && res.error) toast('Microfono: ' + (res.error.message || res.error));
+    else if (!res && !opts.quiet) toast('Non ho sentito niente');
+    resumeWake(); return;
+  }
+  const turn = latStart('voce');
+  setState('thinking'); live('Trascrivo…');
+  let j;
+  try{
+    j = early && early.mark === res.mark ? await early.p : null;   // la frase non è cambiata dopo la pausa: il testo anticipato è buono
+    if (!j || j.__err) j = await sttSend(res.wav);
+  }catch(e){ live(''); setState('idle'); toast('Trascrizione sul gateway: ' + e.message); resumeWake(); return; }
+  latMark('tStt'); live('');
+  const text = (j.text || '').trim();
+  if (!text || /^(sottotitoli|grazie per la visione|\.+)$/i.test(text)){ setState('idle'); toast('Non ho capito, ripeti'); resumeWake(); return; }
+  if (j.rapido && j.rapido.riassunto && !pending.length && !(j.rapido.incompleto && settings.apiKey)){ answerFast(text, j.rapido, { voice:true }); return; }
+  handleUser(text, pending.splice(0), { voice:true, noFast:settings.fastPath && gwHas('rapido') }); renderPending();   // il gateway ha già provato
+}
+function live(t){ $('#live').textContent = t; }
+// conversazione continua: dopo la risposta resta in ascolto qualche secondo, senza avvisi se non dici niente
+function followUp(){ if (useServerStt() && navigator.mediaDevices) listenServer({ quiet:true, waitMs:6000, prompt:'Ti ascolto, puoi continuare…' }); else listenAny(); }
+function meter(l, loud){
+  const el = $('#meter'); if (!el) return;
+  el.style.setProperty('--lv', String(Math.round((l || 0) * 100) / 100)); el.classList.toggle('on', !!l); el.classList.toggle('loud', !!loud);
+}
+
+/* ---------- JARVIS-WAKE-v2: «Evelyn …» sempre in ascolto con Whisper sul gateway, frasi brevi, nome riconosciuto anche storpiato ---------- */
+function wakeMatch(text){
+  const norm = x => String(x || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = ' ' + norm(text) + ' ';
+  const esc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // il nome e le pronunce scelte valgono ovunque nella frase; le storpiature tipiche di Whisper solo in testa (meno falsi allarmi)
+  const ovunque = [...wakeNames().map(n => esc(norm(n))).filter(Boolean), 'evel[iy]n[ae]?', 'everl[iy]n'];
+  const inTesta = ['(?:ehi |hey |ok )?e ?ve ?l(?: ?[iy]n?[ae]?)?', '(?:ehi |hey |ok )?eve ?l[iy]', '(?:ehi |hey |ok )?av[ae] ?l[iy]n', '(?:ehi |hey |ok )?ev ?lin'];
+  for (const r of ovunque){ const m = t.match(new RegExp(' (' + r + ') ')); if (m) return { cmd:t.slice(m.index + m[0].length).trim() }; }
+  for (const r of inTesta){ const m = t.match(new RegExp('^ (' + r + ') ')); if (m) return { cmd:t.slice(m[0].length).trim() }; }
+  return null;
+}
+let wakeLoopOn = false, lastWakeReq = 0;
+async function wakeLoop(){
+  if (wakeLoopOn) return; wakeLoopOn = true;
+  try{
+    while (settings.wake && useServerStt() && !busy && !dictation && !earTurn && !tts.speaking){
+      setState('wake'); $('#status').textContent = 'In ascolto: di\' "' + settings.name + '"';
+      const ctl = new AbortController(); wakeLoopCtl = ctl;
+      setTimeout(() => { if (wakeLoopCtl === ctl && Ear.st && !Ear.st.ticks){ wakeNeedsTap = true; $('#status').textContent = 'Tocca lo schermo per attivare l\'ascolto di "' + settings.name + '"'; } }, 2500);
+      const res = await hearUtterance({ signal:ctl.signal, waitMs:Infinity, maxMs:6000, endMs:600, onLevel:l => meter(l * .6) });
+      meter(0);
+      if (!res || res.aborted || res.error){ if (res && res.error){ wakeBlocked = true; toast('Ascolto in pausa: tocca lo schermo per riattivarlo'); } break; }
+      if (res.voicedMs < 350 || res.voicedMs > 5000) continue;   // le frasi lunghe sono conversazioni o TV, non un comando
+      const tEnd = performance.now();
+      if (tEnd - lastWakeReq < 1200) await sleep(1200 - (tEnd - lastWakeReq));   // al massimo una richiesta ogni 1,2 s (CPU del server)
+      lastWakeReq = performance.now();
+      let j; try{ j = await sttSend(res.wav, 'wake'); }catch(e){ await sleep(1500); continue; }
+      const w = wakeMatch(j.text);
+      if (!w) continue;
+      LAT.cur = { src:'voce', tEnd }; latMark('tStt');
+      const said = (j.text || '').trim();
+      if (w.cmd.length > 2){
+        if (j.rapido && j.rapido.riassunto && !(j.rapido.incompleto && settings.apiKey)) answerFast(said, j.rapido, { voice:true }); else handleUser(said, [], { voice:true, noFast:settings.fastPath && gwHas('rapido') });   // il gateway ha già provato
+      } else { chime(); setTimeout(() => listenServer({ prompt:'Dimmi…' }), 120); }
+      break;
+    }
+  } finally { wakeLoopOn = false; wakeLoopCtl = null; Ear.idle(); if (!settings.wake) setState(busy ? 'thinking' : 'idle'); }
+}
+let wakeLoopCtl = null;
+function stopWakeLoop(){ if (wakeLoopCtl) wakeLoopCtl.abort(); }
+
+/* ---------- JARVIS-BARGE-v1: se parli mentre risponde si ferma e ti ascolta (voce sopra la sua, con il microfono che cancella l'eco) ---------- */
+let bargeSink = null;
+async function startBargeServer(){
+  if (!settings.bargeIn || bargeSink || !useServerStt() || !tts.speaking) return;
+  let st; try{ st = await Ear.open(); }catch(e){ return; }
+  if (!tts.speaking || bargeSink) return;
+  // l'eco della sua voce (già ridotta dal microfono) fa da base: si interrompe solo con una voce chiaramente più forte e lunga
+  const pre = [], t0 = performance.now(), k = (settings.bargeRatio || 8) / 8; let run = 0, echo = 0;
+  bargeSink = (d, rms, s) => {
+    pre.push(d); if (pre.length > 14) pre.shift();
+    const el = performance.now() - t0;
+    if (el < 600){ echo = Math.max(echo, rms); return; }   // primi 0,6 s: si misura l'eco
+    echo = echo * 0.995 + (rms < echo * 2 ? rms * 0.005 : echo * 0.005);
+    const thr = Math.max(0.03 * k, echo * 2.2 * k, s.floor * 6 * k);
+    run = rms > thr ? run + d.length / s.rate * 1000 : Math.max(0, run - 60);
+    if (BARGE_DBG) BARGE_DBG.push([Math.round(el), +rms.toFixed(3), +thr.toFixed(3)]);
+    if (run >= 300 && tts.speaking){
+      stopBargeServer(); stopSpeaking(true);
+      listenServer({ preroll:pre.splice(0), keepSpeech:true, prompt:'Ti ascolto…' });
+    }
+  };
+  Ear.sinks.add(bargeSink);
+}
+let BARGE_DBG = null;
+function stopBargeServer(){ if (bargeSink){ Ear.sinks.delete(bargeSink); bargeSink = null; Ear.idle(); } }
+
+/* ---------- JARVIS-FAST-v1: risposte immediate del gateway (senza Claude) per le domande frequenti ---------- */
+const GW_HINT = /\b(gateway|situazion|aggiornami|novit|allarm|problem|coda|code|oggi|ieri|settiman|traffico|consegn|margin|ricav|telefon|duck|sim\b|dispositiv|vendor|provider|server|servizi|backup|errori|capacit|cross|incass|pagare|credito|giffgaff|notific|test|numero|account|tutto (ok|bene|a posto))/i;
+const CLIENT_INTENTS = [   // se il gateway non ha ancora l'azione «rapido»: poche domande sulle azioni di prima
+  [/\b(situazion|aggiornami|novit|tutto (ok|bene|a posto)|cosa (c'?è|devo) (da )?(fare|controllare))/i, 'allarmi'],
+  [/\b(allarm|problem)/i, 'allarmi'], [/\b(coda|code|in attesa)\b/i, 'coda'], [/\bsettiman/i, 'settimana'],
+  [/\b(telefoni|dispositivi)\b/i, 'dispositivi'], [/\b(vendor|provider)/i, 'provider'], [/\b(server|servizi)\b/i, 'stato'],
+  [/\bbackup/i, 'backup'], [/\b(oggi|traffico|consegn|margin|quanti (sms|messaggi))/i, 'oggi']
+];
+async function fastAnswer(text){
+  if (!settings.fastPath || !hookBase() || !GW_HINT.test(text) || /\b(perch|spieg|confront|analizz|consigl|scriv|prepara)/i.test(text)) return null;
+  if (/\b(metti|togli|attiva|disattiva|riavvia|cambia|imposta|blocca|manda|invia|elimina|sposta|aggiungi|registra|crea|applica)\b/i.test(text)) return null;
+  await gwCaps();
+  if (gwHas('rapido')){
+    try{ const d = await gwAction('rapido', { testo:text }, 6000); return d && !d.nessuna && d.riassunto && !(d.incompleto && settings.apiKey) ? d : null; }catch(e){ return null; }   // dato mancante: meglio Claude, che lo chiede
+  }
+  const hit = CLIENT_INTENTS.find(([re]) => re.test(text)); if (!hit) return null;
+  try{ const d = await gwAction(hit[1], {}, 8000); return d && d.riassunto && d.__status < 400 ? Object.assign(d, { azione:hit[1] }) : null; }catch(e){ return null; }
+}
+function answerFast(text, d, opts = {}){
+  latMark('tAnswer'); if (LAT.cur) LAT.cur.fast = true;
+  stopRec(); stopSpeaking(); tts.mutedTurn = false;
+  addMsg('user', text); logT('user', text);
+  const reply = cleanText(d.riassunto);
+  const b = addMsg('bot', reply); b.classList.add('fast'); logT('bot', reply);
+  if (Array.isArray(d.scorciatoie) && d.scorciatoie.length) addActions(d.scorciatoie.slice(0, 5).map(s => ({ label:s, fn:() => handleUser(s) })));
+  history.push([{ role:'user', content:text }, { role:'assistant', content:[{ type:'text', text:reply }] }]); trimHistory(); persistHistory();   // Claude saprà cosa è stato detto
+  if (LAT.cur && !settings.speak) LAT.cur.noVoice = true;
+  speak(reply).then(() => {
+    if (!tts.speaking && !busy) setState('idle');
+    latShow();
+    if (opts.voice && settings.followUp && !tts.mutedTurn) setTimeout(() => { if (!busy && !rec && !earTurn) followUp(); }, 200);
+    else resumeWake();
+  });
+}
+
+/* ---------- JARVIS-BRIEF-v1: all'apertura (al massimo ogni 3 ore) e su richiesta, il quadro della situazione ---------- */
+async function briefing(force){
+  const hb = hookBase(); if (!hb) return;
+  if (!force && (!settings.briefing || Date.now() - store.get('lastBrief', 0) < 3 * 3600e3)) return;
+  store.set('lastBrief', Date.now());
+  await gwCaps();
+  let d;
+  try{
+    if (gwHas('situazione')) d = await gwAction('situazione', {}, 20000);
+    else {
+      const [a, o] = await Promise.all([gwAction('allarmi', {}, 15000).catch(() => null), gwAction('oggi', {}, 15000).catch(() => null)]);
+      d = { riassunto:[o && o.riassunto, a && a.riassunto].filter(Boolean).join(' ') };
+    }
+  }catch(e){ if (force) toast('Gateway non raggiungibile: ' + e.message); return; }
+  if (!d || !d.riassunto) return;
+  const txt = cleanText(d.riassunto);
+  const b = addMsg('bot brief', txt); logT('bot', txt);
+  const chips = (d.scorciatoie || []).slice(0, 5).map(s => ({ label:s, fn:() => handleUser(s) }));
+  if (!(actx && actx.state === 'running')) chips.unshift({ label:'▶ Ascolta', fn:() => speak(txt, { force:true }) });
+  if (chips.length) addActions(chips);
+  history.push([{ role:'user', content:"Com'è la situazione?" }, { role:'assistant', content:[{ type:'text', text:txt }] }]); trimHistory(); persistHistory();
+  if (actx && actx.state === 'running' && !busy) speak(txt);
+}
+function renderJarvisBar(){
+  const el = $('#jbar'); if (!el) return;
+  el.innerHTML = '';
+  if (!hookBase() || !settings.jbar){ el.hidden = true; return; }
+  el.hidden = false;
+  for (const [lab, q] of [['Situazione', "Com'è la situazione?"], ['Oggi', 'Traffico di oggi'], ['Coda', 'Com\'è la coda?'], ['Telefoni', 'Telefoni offline'],
+                          ['Capacità', 'Capacità per paese'], ['Ieri', "Com'è andata ieri?"]]){
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = lab; b.onclick = () => { NN.ripple(); handleUser(q); }; el.appendChild(b);
+  }
+}
 
 /* ================= Avvio ================= */
 let unlocked = false;
 function afterUnlock(){
   if (unlocked) return; unlocked = true;
   startMonitor(); startPlancia();
+  gwCaps(true).then(() => { renderJarvisBar(); const qp0 = new URLSearchParams(location.search); if (!qp0.get('cmd') && !qp0.get('alert')) setTimeout(() => briefing(false), 600); });   // JARVIS-BRIEF-v1
   const qp = new URLSearchParams(location.search);
   setTimeout(() => {
     const cmd = qp.get('cmd');
     if (qp.get('alert')) monitorTick(true, true);
-    else if (cmd === 'stato') handleUser("Com'è il gateway?");
+    else if (cmd === 'stato' || cmd === 'situazione') briefing(true);
     else if (cmd === 'dettatura') startDictation({});
     else if (cmd) handleUser(cmd);
     if ([...qp.keys()].length) window.history.replaceState(null, '', location.pathname);
@@ -2208,7 +2546,10 @@ function openSettings(){
   $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
   $('#sFollow').checked = settings.followUp; $('#sEngine').value = settings.tts; $('#sPiperVoice').value = settings.piperVoice || DEFAULTS.piperVoice; $('#sElKey').value = settings.elKey; $('#sElVoice').value = settings.elVoice; $('#sElModel').value = settings.elModel; $('#sGh').value = settings.ghToken;
   $('#sStt').value = useServerStt() ? 'server' : settings.stt; $('#sOaiKey').value = settings.oaiKey; $('#sBarge').checked = settings.bargeIn;
-  $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia; 
+  $('#sMonitor').checked = settings.monitor; $('#sMonitorMin').value = settings.monitorMin; $('#sPlancia').checked = settings.plancia;
+  $('#sFast').checked = settings.fastPath; $('#sBrief').checked = settings.briefing; $('#sJbar').checked = settings.jbar; $('#sTimes').checked = settings.showTimes;   // JARVIS-v1
+  $('#sEndMs').value = settings.endMs; $('#sEndMsVal').textContent = secs(settings.endMs); $('#sBargeRatio').value = String(settings.bargeRatio || 8);
+  $('#sLat').textContent = 'Tempi misurati: ' + latSummary() + '.' + (gwActs && gwActs.list ? ' Gateway: ' + (gwHas('rapido') ? 'risposte immediate attive' : 'versione senza risposte immediate (si usano le azioni di prima)') + '.' : '');
   const mh = $('#sMonitorHook'); mh.innerHTML = ''; const hs = hooks();
   if (!hs.length){ const o = document.createElement('option'); o.value = ''; o.textContent = 'nessun webhook configurato'; mh.appendChild(o); }
   hs.forEach(h => { const o = document.createElement('option'); o.value = h.name; o.textContent = h.name; mh.appendChild(o); });
@@ -2230,6 +2571,7 @@ $('#sClose').onclick = () => $('#dlgSettings').close('');
 $('#dCloseX').onclick = () => $('#dlgData').close();
 $('#diagCloseX').onclick = () => $('#dlgDiag').close();
 $('#sRate').oninput = e => $('#sRateVal').textContent = e.target.value + '×';
+$('#sEndMs').oninput = e => $('#sEndMsVal').textContent = secs(+e.target.value);
 $('#dlgSettings').addEventListener('close', async () => {
   if ($('#dlgSettings').returnValue !== 'ok') return;
   Object.assign(settings, {
@@ -2240,9 +2582,11 @@ $('#dlgSettings').addEventListener('close', async () => {
   const newGh = $('#sGh').value.trim();
   if (newGh !== settings.ghToken){ settings.ghToken = newGh; settings.gistId = ''; meta.synced = false; store.set('meta', meta); }
   const newLang = $('#sLang').value; if (newLang !== settings.lang) settings.voiceURI = '';
+  Object.assign(settings, { fastPath:$('#sFast').checked, briefing:$('#sBrief').checked, jbar:$('#sJbar').checked, showTimes:$('#sTimes').checked,
+    endMs:Math.min(1500, Math.max(400, parseInt($('#sEndMs').value) || 700)), bargeRatio:parseInt($('#sBargeRatio').value) || 8 });   // JARVIS-v1
   Object.assign(settings, { sttChosen:settings.sttChosen || $('#sStt').value !== settings.stt, stt:$('#sStt').value, oaiKey:$('#sOaiKey').value.trim(), bargeIn:$('#sBarge').checked, monitor:$('#sMonitor').checked, monitorMin:Math.max(1, parseInt($('#sMonitorMin').value) || 5), monitorHook:$('#sMonitorHook').value, plancia:$('#sPlancia').checked, persona:$('#sPersona').value, gender:$('#sGender').value, personaCustom:$('#sPersonaCustom').value.trim(), wakeAlt:$('#sWakeAlt').value, lang:newLang, accent:$('#sAccent').value, fetch:$('#sFetch').checked, followUp:$('#sFollow').checked, tts:$('#sEngine').value, piperVoice:$('#sPiperVoice').value, elKey:$('#sElKey').value.trim(), elVoice:$('#sElVoice').value.trim() || DEFAULTS.elVoice, elModel:$('#sElModel').value });
   tts.elDisabled = false; tts.elWarned = false;
-  saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow(); if (unlocked){ startMonitor(); startPlancia(); }
+  saveSettings(); applySettings(); toast('Impostazioni salvate'); syncNow(); if (unlocked){ startMonitor(); startPlancia(); gwCaps(true).then(renderJarvisBar); }
 });
 $('#sPiperDl').onclick = async () => {
   const id = $('#sPiperVoice').value, info = $('#sPiperInfo'), btn = $('#sPiperDl'); btn.disabled = true;
@@ -2273,6 +2617,7 @@ $('#file').onchange = async e => {
 function orbAction(){
   if (dictation){ stopDictation(); return; }
   if (wrec){ wrec.stopNow(); return; }
+  if (earTurn){ if (earTurn.ctrl.finish) earTurn.ctrl.finish(); else earTurn.ctl.abort(); return; }   // JARVIS-LISTEN-v1
   if (recMode === 'command'){ try{ rec.stop(); }catch(e){ stopRec(); setState('idle'); } return; }   // STT-FIX-v1: anche durante l'attesa prima dell'avvio
   if (document.body.classList.contains('s-speaking')){ stopSpeaking(true); return; }
   if (busy) return;
@@ -2292,6 +2637,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 function welcome(){
   addMsg('bot', `Salve${settings.userName ? ', ' + settings.userName : ''}. Sono ${settings.name}. Tocca la rete e parlami, oppure scrivi qui sotto.`);
+  const gw = ["Com'è la situazione?", 'Cosa devo controllare?', 'Traffico di oggi', 'Capacità in Germania', 'Stato del telefono duck-45', 'Chi ci deve pagare?', 'Credito giffgaff'];   // JARVIS-v1
+  if (hookBase()) addActions(gw.map(t => ({ label:t, fn:() => handleUser(t) })), 'examples');
   const ex = ['Buongiorno', 'Che tempo fa domani a Milano?', 'Timer di 10 minuti per la pasta', 'Ogni mattina alle 7 e mezza fai la routine buongiorno', 'Dettami una nota', 'Dove sono?', 'Trova una farmacia qui vicino', 'Metti il suono della pioggia per 20 minuti', 'Aggiungi latte e uova alla lista', 'Cosa vedi?', 'Scansiona un QR', 'Accendi la torcia', 'Che ore sono a Tokyo?', 'Quanto vale un bitcoin?', 'Condividi la lista della spesa', "Ultime notizie sull'intelligenza artificiale", 'Come si pronuncia grazie in giapponese?', 'Fai partire il cronometro', 'Genera una password sicura'];
   addActions(ex.map(t => ({ label:t, fn:() => handleUser(t) })), 'examples');
   if (!settings.apiKey){
