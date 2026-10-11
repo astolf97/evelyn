@@ -1779,6 +1779,11 @@ async function runAgent(turn, speaker){
     if (data.stop_reason === 'tool_use'){
       if (bubble) bubble.classList.add('dim');
       speaker.flush();
+      if (step === 0 && !acc.trim() && settings.speak && !tts.mutedTurn){   // JARVIS-SPEED-v1: una parola subito mentre lavora (attesa percepita più corta)
+        const tu = data.content.find(b => b.type === 'tool_use') || {}, gw = tu.name === 'call_webhook' && /^gateway/.test((tu.input || {}).name || '');
+        const scr = gw && /sim pausa|sim test|riavvio|pannello|prezzo|ricoda|scheduler toggle|device pausa/.test(tu.input.name) && !(tu.input.payload || {}).conferma;
+        enqueueSpeech(scr ? 'Preparo.' : gw ? ['Controllo.', 'Un attimo, guardo sul gateway.', 'Verifico subito.'][step % 3] : tu.name === 'web_search' ? 'Cerco.' : 'Un attimo.');
+      }
       const results = [];
       for (const b of data.content){
         if (b.type !== 'tool_use') continue;
