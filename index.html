@@ -801,17 +801,19 @@ function stopSpeaking(mute){
 // TTS-FLOW-v1: parole in maiuscolo che vanno lette come parole (Paola le compita: "SIM" diventava "esse i emme")
 const SAY_AS = [[/\bSIM\b/g, 'sim'], [/\bSIMs\b/g, 'sim'], [/\bPIN\b/g, 'pin'], [/\bOK\b/g, 'okay'], [/\bWiFi\b/gi, 'uaifai']];
 const sayAs = t => SAY_AS.reduce((x, [re, w]) => x.replace(re, w), t);
-function splitSpeech(text){
+function splitSpeech(text, firstMax = 320){
   const clean = sayAs(cleanText(text)).replace(/https?:\/\/\S+/g, 'il link').replace(/\p{Extended_Pictographic}/gu, '');
   const sentences = clean.match(/[^.!?\n]+[.!?\n]*\s*/g) || [clean];   // TTS-PAUSE-v1
   const parts = []; let buf = '';
-  for (const s of sentences){ if ((buf + s).length > 320 && buf){ parts.push(buf); buf = ''; } buf += s; }
+  // JARVIS-SPEED-v1: all'inizio della risposta il primo pezzo è corto (la voce neurale parte prima), poi pezzi lunghi
+  for (const s of sentences){ const max = parts.length ? 320 : firstMax; if ((buf + s).length > max && buf){ parts.push(buf); buf = ''; } buf += s; }
   if (buf.trim()) parts.push(buf);
   return parts;
 }
 function enqueueSpeech(text, opts = {}){
   if ((!settings.speak && !opts.force) || (tts.mutedTurn && !opts.force) || !text || !text.trim()) return;
-  for (const p of splitSpeech(text)) tts.q.push({ text:p, lang:opts.lang || settings.lang, own:!!opts.lang });
+  const starting = !tts.busy && !tts.q.length && !tts.speaking;
+  for (const p of splitSpeech(text, starting && usePiper() ? 90 : 320)) tts.q.push({ text:p, lang:opts.lang || settings.lang, own:!!opts.lang });
   pump();
 }
 function speak(text, opts = {}){ enqueueSpeech(text, opts); return ttsWait(); }
@@ -1654,7 +1656,7 @@ Se l'utente condivide qualcosa di utile da ricordare o te lo chiede, usa remembe
 Se l'utente pronuncia il nome di una routine (anche come "modalità X" o "protocollo X"), esegui le sue istruzioni. Per far partire una routine a un orario ("ogni mattina alle 7 fai la routine buongiorno") usa set_reminder con il campo routine.
 Per testi lunghi da registrare usa dictate; per numeri dalla rubrica usa pick_contact; per mandare qualcosa ad altre app usa share; per luoghi vicini usa find_nearby.
 I webhook "gateway …" interrogano o comandano il gateway SMS dell'utente: rispondono in JSON con un campo riassunto da usare come base. Se un webhook risponde con errore e indica i campi attesi nel payload, richiamalo con quei campi. Le azioni che chiedono un codice di conferma vanno confermate a voce dall'utente prima di richiamare il webhook con il codice. Se al gateway manca un dato che solo l'utente conosce (un numero, un testo, un account, un paese), chiediglielo: non inventarlo mai. "gateway pannello" esegue le operazioni del pannello (rotte e pesi, invio SMS, test HLR, listini fornitori, CRM e schede clienti, profili e routing degli account, blacklist, intervalli e profili dei telefoni, cache) con payload {"operazione": ..., "parametri": {...}}: se non sai quale operazione usare, chiamalo senza payload per l'elenco. I prezzi di vendita si leggono con "gateway prezzi" e si cambiano con "gateway prezzo". Per "cosa devo fare oggi", cose rimaste indietro o suggerimenti sui clienti usa "gateway crm": legge direttamente il CRM (scadenze, clienti fermi, onboarding, follow-up aperti) e ti dà già le priorità. Il gateway impara come l'utente chiama account, telefoni, clienti e paesi quando conferma un'azione: usa pure i suoi modi di dire. Se l'utente dice "ricorda che X è Y" riferito al gateway (un account, un telefono, un cliente, un paese), usa "gateway ricorda" con {"termine", "significa", "tipo"}; se un modo di dire è sbagliato o l'hai capito male (per esempio "mmd casa" invece di "mmd cas"), toglilo con "gateway ricorda" e {"termine": ..., "dimentica": true}, oppure {"significa": ..., "dimentica": true} per togliere tutti quelli che portano a quell'account; per sapere cosa è stato fatto di recente o ripetere un'azione passata ("rifai come ieri") usa "gateway memoria". Per credito, saldo o spesa di Claude usa "gateway claude"; se l'utente dice quanto credito ha adesso o che ha ricaricato, passagli {"saldo": nuovo totale in dollari} (dopo una ricarica il totale è il credito rimasto più la ricarica: se non lo sai chiediglielo), e {"soglia": X} per l'avviso di credito basso.
-JARVIS-v1. Ti comporti come un maggiordomo esperto alla Jarvis: prima il dato che serve, detto in breve; poi, se c'è qualcosa da controllare o da fare, lo suggerisci in una frase e offri di farlo tu (le azioni che cambiano qualcosa chiedono sempre la conferma col codice). Per "com'è la situazione", "novità", "cosa devo fare o controllare" usa "gateway situazione": dà il quadro con le priorità e i suggerimenti. Per un telefono o le sue SIM (stato, pausa, credito, test, batteria) usa "gateway telefono" con {"device": "duck-45" o il nome}; per la capacità e la coda di un paese "gateway capacità per paese" con {"paese"}; per un numero di telefono (blacklist e ultimi messaggi) "gateway numero" con {"numero"}; per ieri "gateway ieri"; per i soldi da incassare "gateway incassi"; per il credito delle SIM "gateway credito giffgaff"; per i test delle SIM "gateway test sim"; per operatori e paesi "gateway cross"; per le notifiche ancora aperte "gateway notifiche aperte". Se un webhook del gateway non esiste ancora (azione sconosciuta), usa quelli di prima senza dirlo all'utente.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
+JARVIS-v1. Ti comporti come un maggiordomo esperto alla Jarvis: prima il dato che serve, detto in breve; poi, se c'è qualcosa da controllare o da fare, lo suggerisci in una frase e offri di farlo tu (le azioni che cambiano qualcosa chiedono sempre la conferma col codice). Per "com'è la situazione", "novità", "cosa devo fare o controllare" usa "gateway situazione": dà il quadro con le priorità e i suggerimenti. Per un telefono o le sue SIM (stato, pausa, credito, test, batteria) usa "gateway telefono" con {"device": "duck-45" o il nome}; per la capacità e la coda di un paese "gateway capacità per paese" con {"paese"}; per un numero di telefono (blacklist e ultimi messaggi) "gateway numero" con {"numero"}; per un messaggio preciso "gateway messaggio" con {"id"}; per ieri "gateway ieri"; per i soldi da incassare "gateway incassi"; per il credito delle SIM "gateway credito giffgaff"; per i test delle SIM "gateway test sim"; per operatori e paesi "gateway cross"; per le notifiche ancora aperte "gateway notifiche aperte". Se un webhook del gateway non esiste ancora (azione sconosciuta), usa quelli di prima senza dirlo all'utente.${haOn() ? '\nHome Assistant è collegato: puoi leggere e comandare la casa.' : ''}`;
   const dynamic = `Data e ora: ${new Date().toLocaleString('it-IT', { dateStyle:'full', timeStyle:'short' })}, fuso ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Dispositivo: ${isAndroid ? 'telefono Android' : 'PC'}.
 Routine disponibili:
 ${routines.length ? routines.map(r => `- ${r.name}: ${r.instructions}`).join('\n') : '(nessuna)'}
@@ -2205,7 +2207,7 @@ const AUTO_HOOKS = { situazione:'gateway situazione', telefono:'gateway telefono
   notifiche_aperte:'gateway notifiche aperte', allarmi:'gateway allarmi', dispositivi:'gateway dispositivi', account:'gateway account',
   owner:'gateway owner', settimana:'gateway settimana', coda:'gateway coda', oggi:'gateway traffico oggi', stato:'gateway stato',
   provider:'gateway provider smpp', sim_pausa:'gateway sim pausa', sim_test:'gateway sim test', pannello:'gateway pannello',
-  prezzi:'gateway prezzi', prezzo:'gateway prezzo', crm_oggi:'gateway crm', memoria:'gateway memoria', ricorda:'gateway ricorda' };
+  prezzi:'gateway prezzi', prezzo:'gateway prezzo', crm_oggi:'gateway crm', memoria:'gateway memoria', ricorda:'gateway ricorda', messaggio:'gateway messaggio' };
 
 /* ---------- tempi di risposta (fine della frase → testo → risposta → prima parola) ---------- */
 const LAT = { cur:null };
@@ -2517,6 +2519,7 @@ let unlocked = false;
 function afterUnlock(){
   if (unlocked) return; unlocked = true;
   startMonitor(); startPlancia();
+  if (usePiper()) setTimeout(() => piperFetch({ text:'Pronto.' }).then(u => URL.revokeObjectURL(u)).catch(() => {}), 2500);   // JARVIS-SPEED-v1: voce neurale già caricata alla prima risposta
   gwCaps(true).then(() => { renderJarvisBar(); const qp0 = new URLSearchParams(location.search); if (!qp0.get('cmd') && !qp0.get('alert')) setTimeout(() => briefing(false), 600); });   // JARVIS-BRIEF-v1
   const qp = new URLSearchParams(location.search);
   setTimeout(() => {
