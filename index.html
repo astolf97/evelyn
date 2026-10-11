@@ -2488,10 +2488,11 @@ const CLIENT_INTENTS = [   // se il gateway non ha ancora l'azione «rapido»: p
   [/\b(situazion|aggiornami|novit|tutto (ok|bene|a posto)|cosa (c'?è|devo) (da )?(fare|controllare))/i, 'allarmi'],
   [/\b(allarm|problem)/i, 'allarmi'], [/\b(coda|code|in attesa)\b/i, 'coda'], [/\bsettiman/i, 'settimana'],
   [/\b(telefoni|dispositivi)\b/i, 'dispositivi'], [/\b(vendor|provider)/i, 'provider'], [/\b(server|servizi)\b/i, 'stato'],
-  [/\bbackup/i, 'backup'], [/\b(oggi|traffico|consegn|margin|quanti (sms|messaggi))/i, 'oggi']
+  [/\bbackup/i, 'backup'], [/\b(traffico|consegn|margin|quanti (sms|messaggi|segmenti))/i, 'oggi']
 ];
 async function fastAnswer(text){
   if (!settings.fastPath || !hookBase() || !GW_HINT.test(text) || /\b(perch|spieg|confront|analizz|consigl|scriv|prepara)/i.test(text)) return null;
+  if (/\b(meteo|tempo fa|piove|agenda|calendario|ricordami|promemoria|timer|sveglia|chiama|whatsapp|ricetta|notizie|traduci|musica)/i.test(text)) return null;   // non è il gateway
   if (/\b(metti|togli|attiva|disattiva|riavvia|cambia|imposta|blocca|manda|invia|elimina|sposta|aggiungi|registra|crea|applica)\b/i.test(text)) return null;
   await gwCaps();
   if (gwHas('rapido')){
