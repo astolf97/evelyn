@@ -1823,6 +1823,7 @@ function trimHistory(){
 async function handleUser(text, atts = [], opts = {}){
   if (busy) return;
   if (!(opts.voice && LAT.cur && !LAT.cur.shown && LAT.cur.tStt !== undefined && performance.now() - LAT.cur.tStt < 5000)) latStart(opts.voice ? 'voce' : 'testo');   // JARVIS-v1: tempi
+  if (!atts.length && text && localIntent(text, opts)) return;   // JARVIS-LOCAL-v1: ripeti, grazie, basta → senza Claude
   if (!atts.length && text && !opts.noFast){   // JARVIS-FAST-v1: domande frequenti sul gateway → risposta diretta, niente Claude
     busy = true; setState('thinking');
     let d = null; try{ d = await fastAnswer(text); }catch(e){} finally { busy = false; }
@@ -2148,7 +2149,17 @@ async function planciaTick(){
   const el = $('#plancia'); const hs = hooks();
   const st = hs.find(x => /stato/i.test(x.name) && !/scheduler/i.test(x.name)), co = hs.find(x => /coda/i.test(x.name)), og = hs.find(x => /traffico|oggi/i.test(x.name));
   if (!settings.plancia || !st){ el.hidden = true; return; }
-  try{ const [s, c, o] = await Promise.all([callHook(st), co ? callHook(co) : null, og ? callHook(og) : null]); renderPlancia(s, c, o); }catch(e){}
+  try{
+    const [s, c, o, q] = await Promise.all([callHook(st), co ? callHook(co) : null, og ? callHook(og) : null, gwHas('situazione') ? gwAction('situazione', {}, 20000).catch(() => null) : null]);
+    renderPlancia(s, c, o);
+    const n = q && Array.isArray(q.voci) ? q.voci.filter(v => v.prio <= 1).length : null;   // JARVIS-BRIEF-v1
+    if (n !== null){
+      const sp = document.createElement('span'), d = document.createElement('i'), b = document.createElement('b');
+      d.className = 'pl-dot' + (n ? ' bad' : ''); b.textContent = n ? String(n) : 'niente';
+      sp.append(d, document.createTextNode('Da guardare '), b); sp.style.cursor = 'pointer'; sp.onclick = () => briefing(true);
+      el.prepend(sp); el.hidden = false;
+    }
+  }catch(e){}
 }
 function startPlancia(){ clearInterval(planT); if (!settings.plancia){ $('#plancia').hidden = true; return; } planciaTick(); planT = setInterval(() => { if (document.visibilityState === 'visible') planciaTick(); }, 120000); }
 function urlB64ToU8(str){ const pad = '='.repeat((4 - str.length % 4) % 4), b = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, ch => ch.charCodeAt(0)); }
@@ -2463,6 +2474,21 @@ async function fastAnswer(text){
   const hit = CLIENT_INTENTS.find(([re]) => re.test(text)); if (!hit) return null;
   try{ const d = await gwAction(hit[1], {}, 8000); return d && d.riassunto && d.__status < 400 ? Object.assign(d, { azione:hit[1] }) : null; }catch(e){ return null; }
 }
+/* JARVIS-LOCAL-v1: poche frasi gestite dal telefono (gratis, istantanee) */
+function localIntent(text, opts){
+  const t = text.toLowerCase().replace(/[^a-zà-ù ]+/gi, ' ').replace(/\s+/g, ' ').trim().replace(/^(evelyn|evelin)\s*/, '');
+  const bots = [...document.querySelectorAll('#log .msg.bot:not(.dim)')], last = bots.length ? bots[bots.length - 1].textContent : '';
+  let reply = null;
+  if (/^(ripeti|puoi ripetere|ripetilo|cosa hai detto|non ho capito)( per favore)?$/.test(t) && last) reply = last;
+  else if (/^(grazie|grazie mille|ok grazie|perfetto grazie|va bene grazie)$/.test(t)) reply = ['Prego.', 'Si figuri.', 'Sempre a disposizione.'][Math.floor(Math.random() * 3)];
+  else if (/^(basta|stop|zitta|silenzio|fermati)$/.test(t)){ stopSpeaking(true); setState('idle'); resumeWake(); return true; }
+  if (reply === null) return false;
+  addMsg('user', text); logT('user', text);
+  if (reply !== last){ addMsg('bot', reply); logT('bot', reply); }
+  if (LAT.cur){ LAT.cur.shown = true; }
+  speak(reply, { force:true }).then(() => { if (!tts.speaking && !busy) setState('idle'); if (opts.voice && settings.followUp && !tts.mutedTurn) followUp(); else resumeWake(); });
+  return true;
+}
 function answerFast(text, d, opts = {}){
   latMark('tAnswer'); if (LAT.cur) LAT.cur.fast = true;
   stopRec(); stopSpeaking(); tts.mutedTurn = false;
@@ -2520,7 +2546,7 @@ function afterUnlock(){
   if (unlocked) return; unlocked = true;
   startMonitor(); startPlancia();
   if (usePiper()) setTimeout(() => piperFetch({ text:'Pronto.' }).then(u => URL.revokeObjectURL(u)).catch(() => {}), 2500);   // JARVIS-SPEED-v1: voce neurale già caricata alla prima risposta
-  gwCaps(true).then(() => { renderJarvisBar(); const qp0 = new URLSearchParams(location.search); if (!qp0.get('cmd') && !qp0.get('alert')) setTimeout(() => briefing(false), 600); });   // JARVIS-BRIEF-v1
+  gwCaps(true).then(() => { renderJarvisBar(); if (settings.plancia && gwHas('situazione')) planciaTick(); const qp0 = new URLSearchParams(location.search); if (!qp0.get('cmd') && !qp0.get('alert')) setTimeout(() => briefing(false), 600); });   // JARVIS-BRIEF-v1
   const qp = new URLSearchParams(location.search);
   setTimeout(() => {
     const cmd = qp.get('cmd');
