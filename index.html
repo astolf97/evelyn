@@ -462,6 +462,22 @@ const uid = () => Math.random().toString(36).slice(2, 8);
 const enc = encodeURIComponent;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const saveSettings = () => { store.set('settings', settings); try{ if (meta){ meta.updated.settings = Date.now(); store.set('meta', meta); } if (typeof scheduleSync === 'function') scheduleSync(); }catch(e){} };
+/* EVELYN-KEYROT-v1: il gateway ha cambiato la chiave e risponde con quella nuova (intestazione X-Evelyn-Key-New, solo a chi usa
+   ancora la vecchia, in HTTPS): si aggiorna da sola in tutti i webhook delle impostazioni, senza doverla scrivere a mano */
+(function(){
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async function(...args){
+    const r = await _fetch(...args);
+    try{
+      const nk = r.headers.get('X-Evelyn-Key-New');
+      if (nk && /^[A-Za-z0-9_\-]{16,}$/.test(nk) && typeof settings === 'object' && settings.hooks){
+        const upd = settings.hooks.split('\n').map(l => /\/webhooks\/evelyn\//.test(l) ? l.replace(/([?&]k=)[^&\s|]+/g, (m, p) => p + nk) : l).join('\n');
+        if (upd !== settings.hooks){ settings.hooks = upd; saveSettings(); if (typeof toast === 'function') toast('Chiave del gateway aggiornata'); }
+      }
+    }catch(e){}
+    return r;
+  };
+})();
 function saveCol(k, v){ store.set(k, v); meta.updated[k] = Date.now(); store.set('meta', meta); refreshData(); scheduleSync(); }
 const saveTodos = () => saveCol('todos', todos);
 const saveRem = () => saveCol('reminders', reminders);
