@@ -246,6 +246,13 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
     <section class="tab" data-tab="gen">
       <div class="card">
         <h3>Cervello</h3>
+        <label>Dove pensa Evelyn
+          <select id="sBrain">
+            <option value="gateway">Sul gateway: stessa Evelyn di Telegram, strumenti del gateway, nessuna chiave qui</option>
+            <option value="app">Su questo telefono: Claude con la chiave qui sotto</option>
+          </select>
+        </label>
+        <p class="hint">Sul gateway: ricorda la conversazione con Telegram a parte, fa da sola le piccole cose (test, pausa di una SIM) e per il resto mostra «Esegui». Foto e allegati usano comunque la chiave di questo telefono.</p>
         <label>API key Anthropic<input id="sKey" type="password" placeholder="sk-ant-..." autocomplete="off"></label>
         <label>Modello
           <select id="sModel">
@@ -432,7 +439,7 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('jv_' + k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('jv_' + k, JSON.stringify(v)); }catch(e){ toast('Memoria del browser piena'); } }
 };
-const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false, endMs:700, fastPath:true, briefing:true, showTimes:true, jbar:true, bargeRatio:8, livePartial:true };   // JARVIS-v1
+const DEFAULTS = { apiKey:'', model:'claude-sonnet-5-5', name:'Evelyn', wakeAlt:'evelin, eveline, evelina', gender:'f', persona:'classica', personaCustom:'', accent:'cyan', userName:'', voiceURI:'', lang:'it-IT', speak:true, wake:false, web:true, fetch:false, rate:1.05, haUrl:'', haToken:'', hooks:'', tts:'browser', elKey:'', elVoice:'EXAVITQu4vr4xnSDxMaL', elModel:'eleven_flash_v2_5', piperVoice:'it_IT-paola-medium', followUp:true, ghToken:'', gistId:'', monitor:false, monitorMin:5, monitorHook:'', plancia:true, bargeIn:true, stt:'google', oaiKey:'', pushOn:false, endMs:700, fastPath:true, briefing:true, showTimes:true, jbar:true, bargeRatio:8, livePartial:true, brain:'gateway' };   // JARVIS-v1, BRAIN-v1
 const LANGS = { 'it-IT':'italiano', 'en-US':'inglese', 'es-ES':'spagnolo', 'fr-FR':'francese', 'de-DE':'tedesco' };
 const ACCENTS = { cyan:[111,211,255], violet:[189,147,255], mint:[142,240,193], amber:[242,179,91], rose:[255,143,171] };
 const wakeNames = () => [settings.name, ...String(settings.wakeAlt || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
@@ -1850,6 +1857,7 @@ async function handleUser(text, atts = [], opts = {}){
   if (busy) return;
   if (!(opts.voice && LAT.cur && !LAT.cur.shown && LAT.cur.tStt !== undefined && performance.now() - LAT.cur.tStt < 5000)) latStart(opts.voice ? 'voce' : 'testo');   // JARVIS-v1: tempi
   if (!atts.length && text && localIntent(text, opts)) return;   // JARVIS-LOCAL-v1: ripeti, grazie, basta → senza Claude
+  if (!atts.length && text && brainOn() && await brainTurn(text, opts)) return;   // BRAIN-v1: il cervello di Evelyn sul gateway
   if (!atts.length && text && !opts.noFast){   // JARVIS-FAST-v1: domande frequenti sul gateway → risposta diretta, niente Claude
     busy = true; setState('thinking');
     let d = null; try{ d = await fastAnswer(text); }catch(e){} finally { busy = false; }
@@ -2505,6 +2513,78 @@ async function startBargeServer(){
 let BARGE_DBG = null;
 function stopBargeServer(){ if (bargeSink){ Ear.sinks.delete(bargeSink); bargeSink = null; Ear.idle(); } }
 
+/* ---------- BRAIN-v1: il cervello di Evelyn sul gateway (stessa Evelyn di Telegram): strumenti precisi del gateway, piccole azioni
+   da sola, le altre con «Esegui»; il telefono fa solo voce, timer, promemoria, link e chiamate che il gateway gli chiede.
+   Gateway vecchio o spento → come prima (Claude dal telefono con la chiave delle impostazioni). ---------- */
+let brainPend = [];        // azioni proposte nell'ultima risposta: «sì» / «no» a voce le conferma senza passare da Claude
+const brainOn = () => settings.brain !== 'app' && !!hookBase();
+const YES = /^(s[iì]|s[iì] (vai|fallo|procedi|esegui|conferma|certo)|vai|fallo|procedi|esegui|conferma|confermo|ok (vai|fallo|procedi)|certo|d'accordo)[.! ]*$/i;
+const NO = /^(no|no grazie|annulla|lascia (stare|perdere)|non farlo|ferma)[.! ]*$/i;
+async function brainConfirm(id, yes, opts = {}){
+  const p = brainPend.find(x => x.id === id); brainPend = brainPend.filter(x => x.id !== id);
+  document.querySelectorAll(`[data-brain="${id}"]`).forEach(b => b.closest('.chips') && b.closest('.chips').remove());
+  busy = true; setState('thinking');
+  let d;
+  try{ d = await gwAction('agente/conferma', { id, esegui:yes, canale:'app', chat:'app' }, 60000); }
+  catch(e){ d = { riassunto:'Non riesco a raggiungere il gateway: non ho eseguito nulla.' }; }
+  finally{ busy = false; }
+  const txt = cleanText(d.risposta || d.riassunto || (yes ? 'Fatto.' : 'Annullato.'));
+  addMsg('bot', (yes && d.ok ? '✅ ' : '') + txt); logT('bot', txt);
+  brainAppActions(d.azioni_app);
+  await speak(txt);
+  if (!tts.speaking && !busy) setState('idle');
+  if (opts.voice && settings.followUp && !tts.mutedTurn) followUp(); else resumeWake();
+  return p;
+}
+function brainAppActions(list){
+  for (const a of list || []){
+    try{
+      if (a.tipo === 'timer') IMPL.set_timer({ seconds:+a.secondi || 60, label:a.testo || 'Timer' });
+      else if (a.tipo === 'promemoria') IMPL.set_reminder({ when:a.quando, text:a.testo || 'Promemoria' });
+      else if (a.tipo === 'apri_link' && a.url) IMPL.open_link({ service:'url', query:a.url });
+      else if (['chiama', 'sms', 'whatsapp'].includes(a.tipo)) IMPL.communicate({ channel:{ chiama:'call', sms:'sms', whatsapp:'whatsapp' }[a.tipo], to:a.a || '', text:a.testo || '' });
+    }catch(e){ console.warn('azione app', a, e); }
+  }
+}
+async function brainTurn(text, opts = {}){
+  const t = text.trim().replace(/^(evelyn|evelin)[,\s]*/i, '');
+  if (brainPend.length && (YES.test(t) || NO.test(t))){
+    addMsg('user', text); logT('user', text); stopRec(); stopSpeaking();
+    await brainConfirm(brainPend[brainPend.length - 1].id, YES.test(t), opts);
+    return true;
+  }
+  busy = true; stopRec(); stopSpeaking(); tts.mutedTurn = false; renderPending();
+  addMsg('user', text); logT('user', text);
+  setState('thinking'); NN.burst(8);
+  const words = setTimeout(() => { if (busy && settings.speak && !tts.speaking) enqueueSpeech(['Controllo.', 'Un attimo.', 'Ci guardo.'][Math.floor(Math.random() * 3)]); }, 1800);
+  let d = null;
+  try{ d = await gwAction('agente/chiedi', { testo:text, canale:'app', chat:'app' }, 110000); }
+  catch(e){ d = null; }
+  finally{ clearTimeout(words); busy = false; }
+  if (!d || d.spento || d.__status === 404 || d.__status === 403 || (d.__status >= 500 && !d.risposta)){
+    if (settings.apiKey){ document.querySelectorAll('#log .msg.user').forEach((m, i, all) => { if (i === all.length - 1) m.remove(); }); return false; }   // gateway vecchio o spento: Claude dal telefono
+    addMsg('err', 'Il gateway non risponde e su questo telefono non c\'è la chiave di Claude.'); setState('idle'); resumeWake(); return true;
+  }
+  latMark('tAnswer');
+  const reply = cleanText(d.risposta || d.riassunto || '');
+  const b = addMsg('bot', reply); logT('bot', reply); if (d.rapido) b.classList.add('fast');
+  if (Array.isArray(d.strumenti) && d.strumenti.length) b.title = 'strumenti: ' + d.strumenti.join(', ') + (d.ms ? ` · ${secs(d.ms)}` : '');
+  history.push([{ role:'user', content:text }, { role:'assistant', content:[{ type:'text', text:reply }] }]); trimHistory(); persistHistory();
+  brainPend = (d.conferme || []).slice(-3);
+  if (brainPend.length) addActions(brainPend.flatMap(c => [
+    { label:'✅ Esegui: ' + (c.cosa.length > 46 ? c.cosa.slice(0, 45) + '…' : c.cosa), fn:() => brainConfirm(c.id, true) },
+    { label:'✖ No', fn:() => brainConfirm(c.id, false) }]));
+  document.querySelectorAll('#log .chips:last-child .chip').forEach((el, i) => { const c = brainPend[Math.floor(i / 2)]; if (c) el.dataset.brain = c.id; });
+  brainAppActions(d.azioni_app);
+  if (LAT.cur && !settings.speak) LAT.cur.noVoice = true;
+  await speak(reply);
+  if (!tts.speaking && !busy) setState('idle');
+  latShow();
+  if (opts.voice && settings.followUp && !tts.mutedTurn) setTimeout(() => { if (!busy && !rec && !earTurn) followUp(); }, 200);
+  else resumeWake();
+  return true;
+}
+
 /* ---------- JARVIS-FAST-v1: risposte immediate del gateway (senza Claude) per le domande frequenti ---------- */
 const GW_HINT = /\b(gateway|situazion|aggiornami|novit|allarm|problem|coda|code|oggi|ieri|settiman|traffico|consegn|margin|ricav|telefon|duck|sim\b|dispositiv|vendor|provider|server|servizi|backup|errori|capacit|cross|incass|pagare|credito|giffgaff|notific|test|numero|account|tutto (ok|bene|a posto))/i;
 const CLIENT_INTENTS = [   // se il gateway non ha ancora l'azione «rapido»: poche domande sulle azioni di prima
@@ -2619,7 +2699,7 @@ function applySettings(){
   if (settings.wake) resumeWake(); else { if (recMode === 'wake') stopRec(); if (!busy) setState('idle'); }
 }
 function openSettings(){
-  $('#sKey').value = settings.apiKey; $('#sModel').value = settings.model; $('#sName').value = settings.name; $('#sUser').value = settings.userName;
+  $('#sKey').value = settings.apiKey; $('#sModel').value = settings.model; $('#sBrain').value = settings.brain || 'gateway'; $('#sName').value = settings.name; $('#sUser').value = settings.userName;
   $('#sRate').value = settings.rate; $('#sRateVal').textContent = settings.rate + '×';
   $('#sSpeak').checked = settings.speak; $('#sWake').checked = settings.wake; $('#sWeb').checked = settings.web;
   $('#sPersona').value = settings.persona; $('#sGender').value = settings.gender; $('#sPersonaCustom').value = settings.personaCustom; $('#sWakeAlt').value = settings.wakeAlt; $('#sLang').value = settings.lang; $('#sAccent').value = settings.accent; $('#sFetch').checked = settings.fetch;
@@ -2659,7 +2739,7 @@ $('#sJarvis').onclick = () => {   // JARVIS-v1: ascolto del nome, conversazione 
 $('#dlgSettings').addEventListener('close', async () => {
   if ($('#dlgSettings').returnValue !== 'ok') return;
   Object.assign(settings, {
-    apiKey:$('#sKey').value.trim(), model:$('#sModel').value, name:$('#sName').value.trim() || 'Evelyn', userName:$('#sUser').value.trim(),
+    apiKey:$('#sKey').value.trim(), model:$('#sModel').value, brain:$('#sBrain').value, name:$('#sName').value.trim() || 'Evelyn', userName:$('#sUser').value.trim(),
     voiceURI:$('#sVoice').value, rate:parseFloat($('#sRate').value), speak:$('#sSpeak').checked, wake:$('#sWake').checked, web:$('#sWeb').checked,
     haUrl:$('#sHaUrl').value.trim(), haToken:$('#sHaToken').value.trim(), hooks:$('#sHooks').value
   });
