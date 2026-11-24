@@ -2565,7 +2565,7 @@ async function brainTurn(text, opts = {}){
     if (settings.apiKey){ document.querySelectorAll('#log .msg.user').forEach((m, i, all) => { if (i === all.length - 1) m.remove(); }); return false; }   // gateway vecchio o spento: Claude dal telefono
     addMsg('err', 'Il gateway non risponde e su questo telefono non c\'è la chiave di Claude.'); setState('idle'); resumeWake(); return true;
   }
-  latMark('tAnswer');
+  latMark('tAnswer'); if (LAT.cur) LAT.cur.fast = true;   // «risposta dal gateway»
   const reply = cleanText(d.risposta || d.riassunto || '');
   const b = addMsg('bot', reply); logT('bot', reply); if (d.rapido) b.classList.add('fast');
   if (Array.isArray(d.strumenti) && d.strumenti.length) b.title = 'strumenti: ' + d.strumenti.join(', ') + (d.ms ? ` · ${secs(d.ms)}` : '');
